@@ -27,6 +27,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, asdict
+from urllib.parse import urlencode
 
 import requests
 from selenium import webdriver
@@ -65,10 +66,12 @@ class BaseScraper:
         'find more', 'view more', 'load more'
     ]
 
-    def __init__(self, headless: bool = True):
+    def __init__(self, headless: bool = True, restart_interval: int = 50):
         self.headless = headless
         self.scrape_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.seen_dealers = set()
+        self.restart_interval = restart_interval
+        self.requests_count = 0
 
     def scrape(self, zip_codes: List[str]) -> List[Dealer]:
         raise NotImplementedError
@@ -85,9 +88,14 @@ class FordScraper(BaseScraper):
     BRAND = "Ford"
     BASE_URL = "https://www.ford.com/dealerships/"
 
-    def __init__(self, headless: bool = True):
-        super().__init__(headless)
+    def __init__(self, headless: bool = True, restart_interval: int = 50):
+        super().__init__(headless, restart_interval)
         self.driver = None
+
+    def _build_search_url(self, zip_code: str) -> str:
+        """Build direct URL to search results page."""
+        params = {'location': zip_code}
+        return f"{self.BASE_URL}?{urlencode(params)}"
 
     def _setup_driver(self):
         options = Options()
@@ -103,10 +111,20 @@ class FordScraper(BaseScraper):
         )
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
 
+        # Resource blocking for faster page loads
+        prefs = {
+            "profile.managed_default_content_settings.images": 2,  # Block images
+            "profile.managed_default_content_settings.stylesheets": 2,  # Block CSS
+        }
+        options.add_experimental_option("prefs", prefs)
+
+        # Eager page loading strategy
+        options.page_load_strategy = 'eager'
+
         service = Service(ChromeDriverManager().install())
         self.driver = webdriver.Chrome(service=service, options=options)
 
-    def scrape(self, zip_codes: List[str]) -> List[Dealer]:
+    def scrape(self, zip_codes: List[str], output_file: Optional[str] = None) -> List[Dealer]:
         all_dealers = []
         self._setup_driver()
 
@@ -114,14 +132,27 @@ class FordScraper(BaseScraper):
             for i, zip_code in enumerate(zip_codes):
                 print(f"[{i+1}/{len(zip_codes)}] Scraping {self.BRAND} dealers for {zip_code}...")
 
+                # Restart driver periodically to prevent memory leaks
+                if self.requests_count >= self.restart_interval:
+                    print(f"  Restarting browser after {self.requests_count} requests...")
+                    self.driver.quit()
+                    self._setup_driver()
+                    self.requests_count = 0
+
                 try:
                     dealers = self._scrape_zip(zip_code)
                     all_dealers.extend(dealers)
                     print(f"  Found {len(dealers)} dealers")
+
+                    # Incremental saving
+                    if output_file and dealers:
+                        self._save_incremental(dealers, output_file)
+
                 except Exception as e:
                     print(f"  Error: {e}")
 
-                time.sleep(2)  # Be polite between requests
+                self.requests_count += 1
+                time.sleep(1)  # Reduced delay
 
         finally:
             if self.driver:
@@ -129,35 +160,45 @@ class FordScraper(BaseScraper):
 
         return all_dealers
 
+    def _save_incremental(self, dealers: List[Dealer], output_file: str):
+        """Append dealers to output file incrementally."""
+        file_exists = os.path.exists(output_file)
+        mode = 'a' if file_exists else 'w'
+
+        with open(output_file, mode, newline='', encoding='utf-8') as f:
+            if dealers:
+                writer = csv.DictWriter(f, fieldnames=asdict(dealers[0]).keys())
+                if not file_exists:
+                    writer.writeheader()
+                for d in dealers:
+                    writer.writerow(asdict(d))
+
     def _scrape_zip(self, zip_code: str) -> List[Dealer]:
         dealers = []
 
-        # Navigate to page
-        self.driver.get(self.BASE_URL)
-        time.sleep(3)
+        # Direct navigation to search results URL
+        search_url = self._build_search_url(zip_code)
+        self.driver.get(search_url)
 
-        # Handle cookie popup
+        # Handle cookie popup with explicit wait
         try:
-            cookie_btn = self.driver.find_element(By.ID, "onetrust-accept-btn-handler")
-            if cookie_btn.is_displayed():
-                cookie_btn.click()
-                time.sleep(1)
+            wait = WebDriverWait(self.driver, 3)
+            cookie_btn = wait.until(
+                EC.element_to_be_clickable((By.ID, "onetrust-accept-btn-handler"))
+            )
+            cookie_btn.click()
         except:
             pass
 
-        # Find and fill search input
-        search_box = self._find_search_input()
-        if not search_box:
-            print(f"  Could not find search input")
+        # Wait for dealer results to load
+        try:
+            wait = WebDriverWait(self.driver, 10)
+            wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "li[class*='dealer'], div[class*='dealer-card']"))
+            )
+        except:
+            print(f"  No dealer results found for {zip_code}")
             return dealers
-
-        search_box.click()
-        search_box.clear()
-        time.sleep(0.3)
-        search_box.send_keys(zip_code)
-        time.sleep(0.5)
-        search_box.send_keys(Keys.RETURN)
-        time.sleep(4)
 
         # Extract dealers
         dealers = self._extract_dealers(zip_code)
@@ -185,8 +226,8 @@ class FordScraper(BaseScraper):
         max_iterations = 30
         no_new_count = 0
 
-        for _ in range(max_iterations):
-            # Click "View More" button
+        for iteration in range(max_iterations):
+            # Click "View More" button with explicit wait
             self._click_view_more()
 
             # Find all dealer cards
@@ -216,7 +257,12 @@ class FordScraper(BaseScraper):
             else:
                 self.driver.execute_script("window.scrollBy(0, 500);")
 
-            time.sleep(0.5)
+            # Short wait for new content to load
+            try:
+                wait = WebDriverWait(self.driver, 2)
+                wait.until(lambda d: len(self._find_dealer_cards()) > len(dealer_cards))
+            except:
+                pass
 
         return dealers
 
@@ -357,12 +403,15 @@ class FordScraper(BaseScraper):
 
     def _click_view_more(self):
         try:
+            wait = WebDriverWait(self.driver, 2)
+            # Find button with "view more", "find more", or "load more" text
             buttons = self.driver.find_elements(By.TAG_NAME, "button")
             for btn in buttons:
                 if any(p in btn.text.lower() for p in ['view more', 'find more', 'load more']):
                     if btn.is_displayed() and btn.is_enabled():
                         self.driver.execute_script("arguments[0].click();", btn)
-                        time.sleep(2)
+                        # Wait for new content to appear
+                        time.sleep(0.5)
                         return True
         except:
             pass
@@ -377,41 +426,60 @@ SCRAPERS = {
 }
 
 
-def _worker_scrape(args: Tuple[str, List[str], bool, int, int]) -> List[Dict]:
+def _worker_scrape(args: Tuple[str, List[str], bool, int, int, int, Optional[str]]) -> List[Dict]:
     """
     Worker function for parallel scraping.
     Runs in a separate process with its own browser instance.
 
     Args:
-        args: Tuple of (brand, zip_codes, headless, worker_id, total_workers)
+        args: Tuple of (brand, zip_codes, headless, worker_id, total_workers, restart_interval, output_file)
 
     Returns:
         List of dealer dictionaries
     """
-    brand, zip_codes, headless, worker_id, total_workers = args
+    brand, zip_codes, headless, worker_id, total_workers, restart_interval, output_file = args
 
     scraper_class = SCRAPERS.get(brand)
     if not scraper_class:
         return []
 
-    scraper = scraper_class(headless=headless)
+    scraper = scraper_class(headless=headless, restart_interval=restart_interval)
     dealers = []
 
     # Setup driver once for this worker
     scraper._setup_driver()
 
+    # Create worker-specific output file for incremental saving
+    worker_output = None
+    if output_file:
+        base, ext = os.path.splitext(output_file)
+        worker_output = f"{base}_worker{worker_id}{ext}"
+
     try:
         for i, zip_code in enumerate(zip_codes):
             print(f"[Worker {worker_id}/{total_workers}] [{i+1}/{len(zip_codes)}] Scraping {zip_code}...")
+
+            # Restart driver periodically to prevent memory leaks
+            if scraper.requests_count >= scraper.restart_interval:
+                print(f"[Worker {worker_id}] Restarting browser after {scraper.requests_count} requests...")
+                scraper.driver.quit()
+                scraper._setup_driver()
+                scraper.requests_count = 0
 
             try:
                 batch = scraper._scrape_zip(zip_code)
                 dealers.extend(batch)
                 print(f"[Worker {worker_id}] Found {len(batch)} dealers for {zip_code}")
+
+                # Incremental saving
+                if worker_output and batch:
+                    scraper._save_incremental(batch, worker_output)
+
             except Exception as e:
                 print(f"[Worker {worker_id}] Error scraping {zip_code}: {e}")
 
-            time.sleep(1)  # Reduced delay for parallel execution
+            scraper.requests_count += 1
+            time.sleep(0.5)  # Reduced delay for parallel execution
     finally:
         if scraper.driver:
             scraper.driver.quit()
@@ -421,7 +489,8 @@ def _worker_scrape(args: Tuple[str, List[str], bool, int, int]) -> List[Dict]:
 
 
 def scrape_parallel(brand: str, zip_codes: List[str], headless: bool = True,
-                    workers: int = 4) -> List[Dealer]:
+                    workers: int = 4, restart_interval: int = 50,
+                    output_file: Optional[str] = None) -> List[Dealer]:
     """
     Scrape dealers using multiple parallel browser instances.
 
@@ -430,6 +499,8 @@ def scrape_parallel(brand: str, zip_codes: List[str], headless: bool = True,
         zip_codes: List of zip codes to search
         headless: Run browsers in headless mode
         workers: Number of parallel browser instances
+        restart_interval: Restart browser after N requests to prevent memory leaks
+        output_file: Optional file path for incremental saving
 
     Returns:
         List of deduplicated Dealer objects
@@ -443,8 +514,8 @@ def scrape_parallel(brand: str, zip_codes: List[str], headless: bool = True,
 
     if workers <= 1:
         # Fall back to sequential for single worker
-        scraper = SCRAPERS[brand](headless=headless)
-        return scraper.scrape(zip_codes)
+        scraper = SCRAPERS[brand](headless=headless, restart_interval=restart_interval)
+        return scraper.scrape(zip_codes, output_file=output_file)
 
     # Split zip codes among workers
     chunks = [[] for _ in range(workers)]
@@ -463,7 +534,7 @@ def scrape_parallel(brand: str, zip_codes: List[str], headless: bool = True,
 
     # Prepare worker arguments
     worker_args = [
-        (brand, chunk, headless, i+1, actual_workers)
+        (brand, chunk, headless, i+1, actual_workers, restart_interval, output_file)
         for i, chunk in enumerate(chunks)
     ]
 
@@ -511,8 +582,12 @@ def load_zip_codes(zip_codes_arg: str, zip_file: str) -> List[str]:
     return codes if codes else ["10001"]
 
 
-def save_results(dealers: List[Dealer], output_dir: str, brand: str):
-    """Save dealers to CSV and JSON files."""
+def save_results(dealers: List[Dealer], output_dir: str, brand: str) -> str:
+    """Save dealers to CSV and JSON files.
+
+    Returns:
+        CSV file path for incremental saving
+    """
     os.makedirs(output_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -532,6 +607,8 @@ def save_results(dealers: List[Dealer], output_dir: str, brand: str):
         json.dump([asdict(d) for d in dealers], f, indent=2)
     print(f"Saved JSON: {json_path}")
 
+    return csv_path
+
 
 def main():
     parser = argparse.ArgumentParser(description="Scrape car dealership information")
@@ -549,6 +626,8 @@ def main():
                         help="Run browser with visible window")
     parser.add_argument("--workers", "-w", type=int, default=1,
                         help="Number of parallel browser instances (default: 1)")
+    parser.add_argument("--restart-interval", type=int, default=50,
+                        help="Restart browser after N requests to prevent memory leaks (default: 50)")
     parser.add_argument("--list-brands", action="store_true",
                         help="List available brands")
 
@@ -587,13 +666,21 @@ def main():
         print(f"Scraping {brand.upper()} dealerships...")
         if workers > 1:
             print(f"Using {workers} parallel browser instances")
+        print(f"Browser restart interval: {args.restart_interval} requests")
         print(f"{'='*60}")
 
+        # Prepare output file for incremental saving
+        os.makedirs(args.output_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        incremental_csv = os.path.join(args.output_dir, f"{brand}_dealers_{timestamp}.csv")
+
         if workers > 1:
-            dealers = scrape_parallel(brand, zip_codes, headless=headless, workers=workers)
+            dealers = scrape_parallel(brand, zip_codes, headless=headless,
+                                    workers=workers, restart_interval=args.restart_interval,
+                                    output_file=incremental_csv)
         else:
-            scraper = SCRAPERS[brand](headless=headless)
-            dealers = scraper.scrape(zip_codes)
+            scraper = SCRAPERS[brand](headless=headless, restart_interval=args.restart_interval)
+            dealers = scraper.scrape(zip_codes, output_file=incremental_csv)
 
         all_dealers.extend(dealers)
 
