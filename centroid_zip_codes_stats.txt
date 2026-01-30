@@ -1,0 +1,58 @@
+Centroid Zip Code Statistics
+==================================================
+
+Total centroid zip codes: 1062
+States/territories covered: 50
+
+By State:
+------------------------------
+AK: 99 centroids
+AL: 22 centroids
+AR: 23 centroids
+AZ: 39 centroids
+CA: 54 centroids
+CO: 34 centroids
+CT: 4 centroids
+DC: 1 centroids
+DE: 3 centroids
+FL: 27 centroids
+GA: 19 centroids
+HI: 8 centroids
+IA: 25 centroids
+ID: 24 centroids
+IL: 23 centroids
+IN: 13 centroids
+KS: 30 centroids
+KY: 14 centroids
+LA: 18 centroids
+MA: 5 centroids
+MD: 4 centroids
+ME: 15 centroids
+MI: 28 centroids
+MN: 32 centroids
+MO: 17 centroids
+MS: 13 centroids
+MT: 43 centroids
+NC: 25 centroids
+ND: 21 centroids
+NE: 22 centroids
+NH: 3 centroids
+NJ: 4 centroids
+NM: 30 centroids
+NV: 21 centroids
+NY: 20 centroids
+OH: 14 centroids
+OK: 20 centroids
+OR: 29 centroids
+PA: 11 centroids
+SC: 8 centroids
+SD: 16 centroids
+TN: 10 centroids
+TX: 80 centroids
+UT: 15 centroids
+VA: 11 centroids
+VT: 1 centroids
+WA: 20 centroids
+WI: 16 centroids
+WV: 6 centroids
+WY: 22 centroids

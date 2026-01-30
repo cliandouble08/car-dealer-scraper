@@ -1,0 +1,26 @@
+brand,name,address,city,state,zip_code,phone,website,dealer_type,distance_miles,search_zip,scrape_date
+Ford,"Watertown Ford, Inc.","625 Pleasant Street Watertown, MA 02472",,,,(617) 518-4684,https://www.watertownfordinc.com/?fmccmp=t1-fd,Standard,4.17,02134,2026-01-30 13:52:19
+Ford,Sentry Ford,"4100 Mystic Valley Parkway Medford, MA 02155",,,,(617) 410-8858,https://www.sentryfordauto.com/?fmccmp=t1-fd,Standard,4.31,02134,2026-01-30 13:52:19
+Ford,"Bonnell Motors, Inc.","353 Cambridge Street Winchester, MA 01890",,,,(617) 420-2863,"http://maps.apple.com/?daddr=353%20Cambridge%20Street%20Winchester,%20MA%2001890",Standard,7.32,02134,2026-01-30 13:52:19
+Ford,McGovern Ford,"1481 Broadway Saugus, MA 01906",,,,(339) 338-4629,https://www.mcgovernford.net/?fmccmp=t1-fd,Standard,8.96,02134,2026-01-30 13:52:19
+Ford,Stoneham Motor Co Inc,"185 Main St Stoneham, MA 02180",,,,(617) 420-1693,https://www.stonehamford.net/?fmccmp=t1-fd,Standard,9.43,02134,2026-01-30 13:52:19
+Ford,Quirk Ford,"540 Southern Artery Quincy, MA 02169",,,,(617) 752-1998,"http://maps.apple.com/?daddr=540%20Southern%20Artery%20Quincy,%20MA%2002169",Standard,9.91,02134,2026-01-30 13:52:19
+Ford,Herb Chambers Ford Braintree,"75 Granite St Braintree, MA 02184",,,,(617) 752-3596,https://www.herbchambersford.biz/?fmccmp=t1-fd,Standard,10.21,02134,2026-01-30 13:52:19
+Ford,Jack Madden Ford Sales Inc,"825 Providence Norwood, MA 02062",,,,(781) 269-6017,https://www.jackmaddenfordsales.com/?fmccmp=t1-fd,Standard,11.98,02134,2026-01-30 13:52:19
+Ford,Acton Ford Inc,"76 Powdermill Road, Route 62 Acton, MA 01720",,,,(978) 331-0148,"http://maps.apple.com/?daddr=76%20Powdermill%20Road,%20Route%2062%20Acton,%20MA%2001720",Standard,16.41,02134,2026-01-30 13:52:19
+Ford,McGovern Ford of Framingham,"1200 Worcester Rd Framingham, MA 01702",,,,(877) 624-1344,https://www.mcgovernfordofframingham.net/?fmccmp=t1-fd,Standard,16.54,02134,2026-01-30 13:52:19
+Ford,Danvers Motor Co Inc,"106 Sylvan St Danvers, MA 01923",,,,(978) 716-5977,https://www.danversmotors.com/?fmccmp=t1-fd,Standard,16.87,02134,2026-01-30 13:52:19
+Ford,"Minuteman Trucks, Inc.","2181 Providence Highway Walpole, MA 02081",,,,(508) 668-3112,https://www.minutemanfordtrucks.com/?fmccmp=t1-fd,Standard,12.,02134,2026-01-30 13:52:19
+Ford,Rodman Ford Sales Inc,"45 Washington Street Foxboro, MA 02035",,,,(774) 300-3094,"http://maps.apple.com/?daddr=45%20Washington%20Street%20Foxboro,%20MA%2002035",Standard,18.98,02134,2026-01-30 13:52:19
+Ford,McGovern Ford of Beverly,"420 Cabot Street Beverly, MA 01915",,,,(351) 223-4036,"http://maps.apple.com/?daddr=420%20Cabot%20Street%20Beverly,%20MA%2001915",Standard,19.11,02134,2026-01-30 13:52:19
+Ford,Jannell Motors Inc,"2000 Washington Street, Route 53 Hanover, MA 02339",,,,(781) 610-3427,"http://maps.apple.com/?daddr=2000%20Washington%20Street,%20Route%2053%20Hanover,%20MA%2002339",Standard,20.04,02134,2026-01-30 13:52:19
+Ford,Colonial Ford of Marlboro,"428 Maple Street Marlborough, MA 01752",,,,(508) 786-8061,https://www.colonialfordofmarlboro.net/?fmccmp=t1-fd,Standard,20.88,02134,2026-01-30 13:52:19
+Ford,24 Ford of Easton,"703 Washington Street South Easton, MA 02375",,,,(781) 318-8077,https://www.24fordofeaston.net/?fmccmp=t1-fd,Standard,21.77,02134,2026-01-30 13:52:19
+Ford,McGovern Ford at Drum Hill,"1212 Westford Road Lowell, MA 01851",,,,(978) 323-1058,https://www.mcgovernfordlowellma.com/?fmccmp=t1-fd,Standard,22.14,02134,2026-01-30 13:52:19
+Ford,Franklin Ford,"175 East Central Street Franklin, MA 02038",,,,(774) 613-6160,https://www.franklinfordsales.com/?fmccmp=t1-fd,Standard,22.98,02134,2026-01-30 13:52:19
+Ford,Gervais Inc,"5 Littleton Road Ayer, MA 01432",,,,(978) 588-1278,"http://maps.apple.com/?daddr=5%20Littleton%20Road%20Ayer,%20MA%2001432",Standard,26.24,02134,2026-01-30 13:52:19
+Ford,Herb Chambers Ford Westborough,"310 Turnpike Road Westborough, MA 01581",,,,(774) 399-6078,https://www.herbchambersford.net/?fmccmp=t1-fd,Standard,26.97,02134,2026-01-30 13:52:19
+Ford,Imperial Ford,"8 Uxbridge Rd. Mendon, MA 01756",,,,(774) 448-2212,"http://maps.apple.com/?daddr=8%20Uxbridge%20Rd.%20Mendon,%20MA%2001756",Standard,27.96,02134,2026-01-30 13:52:19
+Ford,Salem Ford,"60 South Broadway Salem, NH 03079",,,,(603) 685-3152,https://www.salemford.net/?fmccmp=t1-fd,Standard,29.58,02134,2026-01-30 13:52:19
+Ford,Autofair Ford of Haverhill,"501 Broadway Haverhill, MA 01832",,,,(978) 361-1021,https://www.autofairfordofhaverhill.net/?fmccmp=t1-fd,Standard,29.76,02134,2026-01-30 13:52:19
+Ford,Grieco Ford,"1651 New State Highway Raynham, MA 02767",,,,(774) 406-2873,https://www.griecofordofraynham.com/?fmccmp=t1-fd,Standard,31.77,02134,2026-01-30 13:52:19

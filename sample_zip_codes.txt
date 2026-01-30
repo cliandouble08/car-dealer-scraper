@@ -1,0 +1,38 @@
+# Sample US Zip Codes for Testing
+# One zip code per line
+# For full coverage, use a comprehensive list of ~500-1000 zip codes spread across the US
+
+# Northeast
+02110
+10001
+19103
+06103
+02134
+
+# Southeast
+33101
+30303
+27601
+37203
+32801
+
+# Midwest
+60601
+48201
+43215
+55401
+63101
+
+# Southwest
+75201
+77001
+85001
+87101
+73102
+
+# West
+90001
+94102
+98101
+80202
+89101

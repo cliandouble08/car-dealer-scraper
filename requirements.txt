@@ -1,0 +1,11 @@
+# Dealer Scraper Requirements
+
+# Browser automation
+selenium>=4.15.0
+webdriver-manager>=4.0.0
+
+# HTTP requests (for API-based scraping)
+requests>=2.31.0
+
+# Zip code database for coverage generation
+pgeocode>=0.4.0

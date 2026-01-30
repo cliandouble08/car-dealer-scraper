@@ -1,0 +1,1169 @@
+# Centroid Zip Codes for Nationwide Coverage
+# Total: 1062 zip codes
+# Each zip code covers approximately 50mi radius
+# Generated for use with scrape_dealers.py
+#
+# Usage: python scrape_dealers.py --brand ford --zip-file centroid_zip_codes.txt
+#
+
+# AK
+99546  # Adak
+99720  # Allakaket
+99721  # Anaktuvuk Pass
+99502  # Anchorage
+99722  # Arctic Village
+99547  # Atka
+99791  # Atqasuk
+99723  # Barrow
+99724  # Beaver
+99727  # Buckland
+99729  # Cantwell
+99730  # Central
+99788  # Chalkyitsik
+99732  # Chicken
+99565  # Chignik Lagoon
+99566  # Chitina
+99568  # Clam Gulch
+99569  # Clarks Point
+99704  # Clear
+99574  # Cordova
+99921  # Craig
+99738  # Eagle
+99702  # Eielson Afb
+99825  # Elfin Cove
+99739  # Elim
+99583  # False Pass
+99731  # Fort Greely
+99740  # Fort Yukon
+99588  # Glennallen
+99827  # Haines
+99602  # Holy Cross
+99604  # Hooper Bay
+99745  # Hughes
+99746  # Huslia
+99923  # Hyder
+99606  # Iliamna
+99505  # Jber
+99830  # Kake
+99747  # Kaktovik
+99748  # Kaltag
+99750  # Kivalina
+99619  # Kodiak
+99620  # Kotlik
+99752  # Kotzebue
+99622  # Kwigillingok
+99757  # Lake Minchumina
+99625  # Levelock
+99626  # Lower Kalskag
+99756  # Manley Hot Springs
+99585  # Marshall
+99627  # Mc Grath
+99630  # Mekoryuk
+99926  # Metlakatla
+99634  # Napakiak
+99690  # Nightmute
+99638  # Nikolski
+99762  # Nome
+99764  # Northway
+99789  # Nuiqsut
+99666  # Nunam Iqua
+99643  # Old Harbor
+99648  # Perryville
+99649  # Pilot Point
+99651  # Platinum
+99766  # Point Hope
+99759  # Point Lay
+99836  # Port Alexander
+99549  # Port Heiden
+99734  # Prudhoe Bay
+99655  # Quinhagak
+99768  # Ruby
+99591  # Saint George Island
+99659  # Saint Michael
+99661  # Sand Point
+99769  # Savoonga
+99770  # Selawik
+99663  # Seldovia
+99664  # Seward
+99772  # Shishmaref
+99773  # Shungnak
+99835  # Sitka
+99668  # Sleetmute
+99774  # Stevens Village
+99674  # Sutton
+99776  # Tanacross
+99777  # Tanana
+99778  # Teller
+99841  # Tenakee Springs
+99678  # Togiak
+99682  # Tyonek
+99684  # Unalakleet
+99685  # Unalaska
+99686  # Valdez
+99782  # Wainwright
+99783  # Wales
+99693  # Whittier
+99688  # Willow
+99929  # Wrangell
+99689  # Yakutat
+
+# AL
+35442  # Aliceville
+36504  # Atmore
+36425  # Beatrice
+35546  # Berry
+35206  # Birmingham
+35957  # Boaz
+36010  # Brundidge
+36851  # Cottonton
+36320  # Cottonwood
+35619  # Danville
+36261  # Edwardsville
+35966  # Flat Rock
+35072  # Goodwater
+36547  # Gulf Shores
+36863  # Lanett
+36793  # Lawley
+36748  # Linden
+36455  # Lockhart
+36558  # Millry
+36105  # Montgomery
+35593  # Vina
+36587  # Wilmer
+
+# AR
+71820  # Alleene
+72829  # Centerville
+72628  # Deer
+71834  # Doddridge
+72634  # Flippin
+71943  # Glenwood
+71749  # Junction City
+72745  # Lowell
+72358  # Luxora
+72555  # Marcella
+72101  # Mc Crory
+71660  # New Edinburg
+72369  # Oneida
+72376  # Proctor
+71666  # Rohwer
+71858  # Rosston
+72465  # Sedgwick
+72167  # Traskwood
+72955  # Uniontown
+72173  # Vilonia
+72175  # Wabbaseka
+72958  # Waldron
+71676  # Wilmot
+
+# AZ
+85922  # Blue
+86442  # Bullhead City
+85193  # Casa Grande
+85328  # Cibola
+86021  # Colorado City
+86326  # Cottonwood
+85333  # Dateland
+85926  # Fort Apache
+85135  # Hayden
+86025  # Holbrook
+86506  # Houck
+86033  # Kayenta
+86034  # Keams Canyon
+86401  # Kingman
+86332  # Kirkland
+86406  # Lake Havasu City
+86035  # Leupp
+86432  # Littlefield
+85341  # Lukeville
+86036  # Marble Canyon
+86444  # Meadview
+85620  # Naco
+85087  # New River
+85621  # Nogales
+85343  # Palo Verde
+85547  # Payson
+85627  # Pomerene
+85548  # Safford
+85936  # Saint Johns
+85348  # Salome
+85349  # San Luis
+85632  # San Simon
+86435  # Supai
+85639  # Topawa
+85190  # Tortilla Flat
+86556  # Tsaile
+86045  # Tuba City
+85743  # Tucson
+86046  # Williams
+
+# CA
+92304  # Amboy
+90704  # Avalon
+96129  # Beckwourth
+93512  # Benton
+93513  # Big Pine
+93920  # Big Sur
+95606  # Brooks
+92230  # Cabazon
+92055  # Camp Pendleton
+93519  # Cantil
+93430  # Cayucos
+96020  # Chester
+93210  # Coalinga
+96107  # Coleville
+95228  # Copperopolis
+96022  # Cottonwood
+94929  # Dillon Beach
+94505  # Discovery Bay
+95318  # El Portal
+95939  # Elk Creek
+96028  # Fall River Mills
+92310  # Fort Irwin
+93226  # Glennville
+93199  # Goleta
+95445  # Gualala
+95322  # Gustine
+96115  # Lake City
+93437  # Lompoc
+93249  # Lost Hills
+96058  # Macdoel
+93637  # Madera
+90263  # Malibu
+92254  # Mecca
+92366  # Mountain Pass
+92259  # Ocotillo
+93549  # Olancha
+95962  # Oregon House
+95555  # Orick
+94044  # Pacifica
+93551  # Palmdale
+93222  # Pine Mountain Club
+95741  # Rancho Cordova
+96123  # Ravendale
+92173  # San Ysidro
+95062  # Santa Cruz
+95565  # Scotia
+96085  # Scott Bar
+92384  # Shoshone
+96142  # Tahoma
+96091  # Trinity Center
+92393  # Victorville
+93277  # Visalia
+95488  # Westport
+92886  # Yorba Linda
+
+# CO
+81020  # Aguilar
+81121  # Arboles
+81611  # Aspen
+80016  # Aurora
+80513  # Berthoud
+81023  # Beulah
+81027  # Branson
+81029  # Campo
+80929  # Colorado Springs
+81630  # De Beque
+81132  # Del Norte
+81610  # Dinosaur
+81325  # Egnar
+81039  # Fowler
+81522  # Gateway
+80729  # Grover
+81047  # Holly
+80734  # Holyoke
+81138  # Jaroso
+80456  # Jefferson
+80824  # Kirk
+80825  # Kit Carson
+81054  # Las Animas
+80826  # Limon
+81641  # Meeker
+81425  # Olathe
+80468  # Parshall
+80747  # Peetz
+81242  # Poncha Springs
+81243  # Powderhorn
+81332  # Rico
+80477  # Steamboat Springs
+81334  # Towaoc
+80654  # Wiggins
+
+# CT
+06413  # Clinton
+06754  # Cornwall Bridge
+06243  # East Killingly
+06836  # Greenwich
+
+# DC
+20375  # Washington
+
+# DE
+19703  # Claymont
+19964  # Marydel
+19975  # Selbyville
+
+# FL
+32320  # Apalachicola
+32625  # Cedar Key
+34138  # Chokoloskee
+32116  # Daytona Beach
+34223  # Englewood
+33928  # Estero
+33306  # Fort Lauderdale
+32640  # Hawthorne
+33847  # Homeland
+33033  # Homestead
+32219  # Jacksonville
+34958  # Jensen Beach
+33040  # Key West
+32025  # Lake City
+34788  # Leesburg
+33001  # Long Key
+32941  # Melbourne
+32832  # Orlando
+32408  # Panama City
+32350  # Pinetta
+32080  # Saint Augustine
+32355  # Saint Marks
+33715  # Saint Petersburg
+32356  # Salem
+33493  # South Bay
+34610  # Spring Hill
+33960  # Venus
+
+# GA
+31623  # Argyle
+39834  # Climax
+31024  # Eatonton
+30815  # Hephzibah
+31544  # Jacksonville
+31527  # Jekyll Island
+31555  # Odum
+31775  # Omega
+30272  # Red Oak
+30171  # Rydal
+39885  # Sasser
+31411  # Savannah
+30460  # Statesboro
+30573  # Tallulah Falls
+30286  # Thomaston
+30668  # Tignall
+31091  # Unadilla
+30680  # Winder
+31096  # Wrightsville
+
+# HI
+96705  # Eleele
+96709  # Kapolei
+96753  # Kihei
+96770  # Maunaloa
+96772  # Naalehu
+96778  # Pahoa
+96738  # Waikoloa
+96898  # Wake Island
+
+# IA
+52537  # Bloomfield
+51631  # Braddyville
+50626  # Dunkerton
+51531  # Elk Horn
+51240  # Inwood
+52632  # Keokuk
+50138  # Knoxville
+51449  # Lake City
+52151  # Lansing
+51029  # Larrabee
+50142  # Le Grand
+50147  # Lineville
+51545  # Little Sioux
+50152  # Luther
+50155  # Macksburg
+52305  # Martelle
+52066  # North Buena Vista
+52646  # Oakville
+50460  # Orchard
+51561  # Pacific Junction
+50227  # Popejoy
+52768  # Princeton
+51101  # Sioux City
+52335  # South English
+50598  # Whittemore
+
+# ID
+83312  # Almo
+83212  # Arbon
+83213  # Arco
+83802  # Avery
+83604  # Bruneau
+83816  # Coeur d'Alene
+83821  # Coolin
+83324  # Dietrich
+83615  # Donnelly
+83237  # Franklin
+83832  # Genesee
+83631  # Idaho City
+83340  # Ketchum
+83539  # Kooskia
+83464  # Leadore
+83641  # Melba
+83256  # Moreland
+83661  # Payette
+83441  # Rexburg
+83549  # Riggins
+83302  # Rogerson
+83469  # Shoup
+83278  # Stanley
+83285  # Wayan
+
+# IL
+62001  # Alhambra
+62006  # Batchtown
+62914  # Cairo
+61426  # Castleton
+62827  # Crossville
+62830  # Dix
+60518  # Earlville
+61030  # Forreston
+62244  # Fults
+62940  # Gorham
+61747  # Hopedale
+62345  # Kinderhook
+62438  # Lakewood
+62661  # Loami
+60148  # Lombard
+60954  # Momence
+61856  # Monticello
+61764  # Pontiac
+62982  # Rosiclare
+60963  # Rossville
+61955  # Vermilion
+61484  # Vermont
+62475  # West Liberty
+
+# IN
+46507  # Bristol
+46117  # Charlottesville
+46814  # Fort Wayne
+47243  # Hanover
+47435  # Helmsburg
+46901  # Kokomo
+47135  # Laconia
+47558  # Montgomery
+46165  # North Salem
+46968  # Ora
+47635  # Rockport
+47381  # Salamonia
+47060  # West Harrison
+
+# KS
+66930  # Agenda
+67005  # Arkansas City
+66006  # Baldwin City
+67423  # Beverly
+67731  # Bird City
+67333  # Caney
+66720  # Chanute
+67028  # Coats
+67635  # Dresden
+66024  # Elwood
+67840  # Englewood
+66941  # Esbon
+67846  # Garden City
+67052  # Goddard
+67736  # Gove
+66436  # Holton
+66441  # Junction City
+67073  # Lehigh
+67905  # Liberal
+67647  # Long Island
+67559  # Nekoma
+66864  # Neosho Rapids
+67658  # Paradise
+66075  # Pleasanton
+67132  # Rosalia
+67579  # Sterling
+66778  # Treece
+67150  # Waldron
+67761  # Wallace
+67882  # Wright
+
+# KY
+41513  # Belcher
+42104  # Bowling Green
+40927  # Closplint
+41219  # Flatgap
+40940  # Frakes
+42049  # Hazel
+42151  # Hestand
+40350  # Moorefield
+42764  # Mount Sherman
+42544  # Nancy
+42262  # Oak Grove
+40983  # Sextons Creek
+41174  # South Portsmouth
+40390  # Wilmore
+
+# LA
+71219  # Baskin
+70040  # Braithwaite
+71016  # Castor
+70522  # Centerville
+70353  # Dulac
+70529  # Duson
+71432  # Georgetown
+70643  # Grand Chenier
+71341  # Hessmer
+71439  # Hornbeck
+71049  # Logansport
+70449  # Maurepas
+70654  # Mittie
+70762  # Oscar
+70081  # Pilottown
+70661  # Starks
+70464  # Talisheek
+71373  # Vidalia
+
+# MA
+02713  # Cuttyhunk
+01063  # Northampton
+02171  # Quincy
+02564  # Siasconset
+02666  # Truro
+
+# MD
+21715  # Brownsville
+21538  # Kitzmiller
+21131  # Phoenix
+21866  # Tylerton
+
+# ME
+04613  # Birch Harbor
+04413  # Brookton
+04737  # Clayton Lake
+04628  # Dennysville
+04741  # Estcourt Station
+04442  # Greenville Junction
+04449  # Hudson
+03904  # Kittery
+04050  # Long Island
+04051  # Lovell
+04851  # Matinicus
+04760  # Monticello
+04970  # Rangeley
+04358  # South China
+04783  # Stockholm
+
+# MI
+49012  # Augusta
+49617  # Beulah
+48529  # Burton
+49232  # Camden
+49720  # Charlevoix
+49918  # Copper Harbor
+48201  # Detroit
+48835  # Fowler
+49835  # Garden
+49739  # Grayling
+49744  # Herron
+49802  # Kingsford
+48144  # Lambertville
+49946  # Lanse
+49431  # Ludington
+49434  # Macatawa
+49665  # Marion
+49858  # Menominee
+48674  # Midland
+48456  # Minden City
+49259  # Munith
+49762  # Naubinway
+49337  # Newaygo
+49775  # Pointe Aux Pins
+48061  # Port Huron
+49885  # Skandia
+48764  # Tawas City
+49969  # Watersmeet
+
+# MN
+56430  # Ah Gwah Ching
+56009  # Alden
+55703  # Angora
+55003  # Bayport
+55601  # Beaver Bay
+56214  # Belview
+56438  # Browerville
+55923  # Chatfield
+56444  # Deerwood
+56235  # Donnelly
+55808  # Duluth
+56721  # East Grand Forks
+55604  # Grand Marais
+56727  # Grygla
+56729  # Halma
+55037  # Hinckley
+56139  # Holland
+56553  # Kent
+55946  # Kenyon
+56150  # Lakefield
+56651  # Lengby
+56654  # Loman
+56257  # Marietta
+56273  # New London
+56741  # Oak Island
+56573  # Perham
+56574  # Perley
+55377  # Santiago
+56084  # Searles
+55784  # Swan River
+56688  # Wirt
+55550  # Young America
+
+# MO
+64622  # Bogard
+65441  # Bourbon
+63938  # Fagus
+65329  # Florence
+65257  # Higbee
+65486  # Iberia
+65501  # Jadwin
+64061  # Kingsville
+65590  # Long Lane
+64763  # Lowry City
+63460  # Novelty
+63957  # Piedmont
+65737  # Reeds Spring
+65752  # South Greenfield
+65077  # Steedman
+65791  # Thayer
+65768  # Vanzant
+
+# MS
+39051  # Carthage
+39632  # Chatawa
+39066  # Edwards
+39507  # Gulfport
+39404  # Hattiesburg
+39338  # Louin
+39115  # Midnight
+38944  # Minter City
+39140  # Newhebron
+39756  # Prairie
+38663  # Ripley
+39767  # Stewart
+38673  # Taylor
+
+# MT
+59820  # Alberton
+59710  # Alder
+59311  # Alzada
+59313  # Baker
+59520  # Big Sandy
+59717  # Bozeman
+59014  # Bridger
+59422  # Choteau
+59322  # Cohagen
+59323  # Colstrip
+59826  # Condon
+59434  # East Glacier Park
+59221  # Fairview
+59918  # Fortine
+59447  # Geyser
+59230  # Glasgow
+59330  # Glendive
+59835  # Grantsdale
+59033  # Greycliff
+59837  # Hall
+59037  # Huntley
+59039  # Ingomar
+59920  # Kila
+59457  # Lewistown
+59461  # Lothair
+59538  # Malta
+59053  # Martinsdale
+59301  # Miles City
+59853  # Noxon
+59062  # Otter
+59253  # Peerless
+59345  # Powderville
+59258  # Reserve
+59081  # Silver Gate
+59643  # Toston
+59274  # Vida
+59758  # West Yellowstone
+59087  # Winnett
+59762  # Wise River
+59648  # Wolf Creek
+59089  # Wyola
+59546  # Zortman
+59547  # Zurich
+
+# NC
+28714  # Burnsville
+28718  # Cedar Mountain
+28277  # Charlotte
+28615  # Creston
+27239  # Denton
+27243  # Efland
+28594  # Emerald Isle
+28733  # Fontana Dam
+28530  # Grifton
+28102  # Mc Farlan
+27557  # Middlesex
+28114  # Mooresboro
+27958  # Moyock
+27960  # Ocracoke
+28368  # Olivia
+27042  # Pine Hall
+27962  # Plymouth
+28375  # Proctorville
+28699  # Scotts
+28468  # Sunset Beach
+27887  # Tillery
+27584  # Townsville
+28393  # Turkey
+27981  # Wanchese
+28411  # Wilmington
+
+# ND
+58425  # Cooperstown
+58601  # Dickinson
+58433  # Edgeley
+58031  # Fingal
+58634  # Grassy Butte
+58043  # Havana
+58639  # Hettinger
+58250  # Lankin
+58559  # Mercer
+58560  # Moffit
+58353  # Mylo
+58563  # New Salem
+58768  # Norwich
+58357  # Oberon
+58775  # Roseglen
+58568  # Selfridge
+58787  # Tolley
+58281  # Wales
+58794  # White Earth
+58496  # Woodworth
+58581  # Zeeland
+
+# NE
+69301  # Alliance
+68309  # Barneston
+68826  # Central City
+68629  # Clarkson
+68834  # Eddyville
+68636  # Elgin
+69134  # Elsie
+69135  # Elsmere
+68734  # Emmet
+68736  # Fordyce
+69343  # Gordon
+69345  # Harrisburg
+69346  # Harrison
+68945  # Heartwell
+69216  # Kilgore
+69147  # Lewellen
+68532  # Lincoln
+68452  # Ong
+68862  # Ord
+69163  # Stapleton
+69042  # Stockville
+69366  # Whitman
+
+# NH
+03740  # Bath
+03745  # Cornish
+03084  # Temple
+
+# NJ
+08006  # Barnegat Light
+08210  # Cape May Court House
+07855  # Middleville
+08534  # Pennington
+
+# NM
+87011  # Claunch
+87070  # Clines Corners
+88029  # Columbus
+88114  # Crossroads
+87313  # Crownpoint
+87013  # Cuba
+87821  # Datil
+87527  # Dixon
+87935  # Elephant Butte
+88034  # Faywood
+88118  # Floyd
+88252  # Jal
+88012  # Las Cruces
+88255  # Loco Hills
+87031  # Los Lunas
+87733  # Mosquero
+88431  # Newkirk
+88343  # Picacho
+87049  # San Fidel
+88434  # San Jon
+87052  # Santo Domingo Pueblo
+87745  # Sapello
+88436  # Sedan
+87801  # Socorro
+87747  # Springer
+88063  # Sunland Park
+87575  # Tierra Amarilla
+88350  # Timberon
+88268  # Whites City
+88136  # Yeso
+
+# NV
+89001  # Alamo
+89310  # Austin
+89003  # Beatty
+89821  # Crescent Valley
+89405  # Empire
+89316  # Eureka
+89409  # Gabbs
+89414  # Golconda
+89013  # Goldfield
+89015  # Henderson
+89018  # Indian Springs
+89419  # Lovelock
+89317  # Lund
+89022  # Manhattan
+89425  # Orovada
+89042  # Panaca
+89833  # Ruby Valley
+89429  # Silver Springs
+89834  # Tuscarora
+89835  # Wells
+89883  # West Wendover
+
+# NY
+14708  # Alma
+12916  # Brushton
+14429  # Clarendon
+13749  # Corbettsville
+13757  # East Meredith
+12428  # Ellenville
+14069  # Glenwood
+13087  # Little York
+14512  # Naples
+13417  # New York Mills
+14758  # Niobe
+12972  # Peru
+12143  # Ravena
+13682  # Rodman
+12873  # Shushan
+13156  # Sterling
+12883  # Ticonderoga
+13695  # Wanakena
+12190  # Wells
+14894  # Wellsburg
+
+# OH
+43909  # Blaine
+45620  # Cheshire
+45403  # Dayton
+44624  # Dundee
+44833  # Galion
+44044  # Grafton
+45644  # Kingston
+44062  # Middlefield
+45154  # Mount Orab
+45768  # Newport
+43064  # Plain City
+44455  # Rogers
+45896  # Waynesfield
+43701  # Zanesville
+
+# OK
+73537  # Eldorado
+73041  # Gotebo
+74738  # Grant
+73043  # Greenfield
+74549  # Honobia
+74747  # Kemp
+73654  # Leedey
+73441  # Leon
+73109  # Oklahoma City
+74452  # Peggs
+74456  # Preston
+73562  # Randlett
+74062  # Ripley
+73082  # Rush Springs
+74818  # Seminole
+73086  # Sulphur
+73949  # Texhoma
+73668  # Texola
+74576  # Wardville
+74472  # Whitefield
+
+# OR
+97324  # Alsea
+97814  # Baker City
+97707  # Bend
+97622  # Bly
+97818  # Boardman
+97522  # Butte Falls
+97820  # Canyon City
+97329  # Cascadia
+97054  # Deer Island
+97722  # Diamond
+97434  # Dorena
+97021  # Dufur
+97023  # Estacada
+97910  # Jordan Valley
+97911  # Juntura
+97857  # Lostine
+97741  # Madras
+97130  # Manzanita
+97868  # Pilot Rock
+97637  # Plush
+97465  # Port Orford
+97752  # Post
+97467  # Reedsport
+97758  # Riley
+97378  # Sheridan
+97638  # Silver Lake
+97874  # Spray
+97543  # Wilderville
+97496  # Winston
+
+# PA
+15420  # Cardale
+15535  # Clearville
+15841  # Force
+17827  # Freeburg
+17324  # Gardners
+17533  # Hopeland
+16652  # Huntingdon
+17723  # Jersey Shore
+18230  # Junedale
+15944  # New Florence
+16248  # Rimersburg
+
+# SC
+29020  # Camden
+29332  # Cross Hill
+29438  # Edisto Island
+29924  # Hampton
+29059  # Holly Hill
+29560  # Lake City
+29458  # Mc Clellanville
+29123  # Pelion
+
+# SD
+57319  # Bridgewater
+57523  # Burke
+57233  # Erwin
+57532  # Fort Pierre
+57339  # Fort Thompson
+57553  # Milesville
+57758  # Mud Butte
+57467  # Orient
+57703  # Rapid City
+57652  # Ridgeview
+57782  # Smithwick
+57477  # Turton
+57380  # Wagner
+57577  # Wanblee
+57585  # Wood
+57385  # Woonsocket
+
+# TN
+38454  # Duck River
+38330  # Dyer
+38332  # Enville
+37076  # Hermitage
+38463  # Iron City
+37763  # Kingston
+37822  # Newport
+37361  # Ocoee
+38488  # Taft
+37394  # Viola
+
+# TX
+79501  # Anson
+78338  # Armstrong
+78001  # Artesia Wells
+78704  # Austin
+77950  # Austwell
+79718  # Balmorhea
+78829  # Batesville
+79505  # Benjamin
+79834  # Big Bend National Park
+78832  # Brackettville
+78522  # Brownsville
+79014  # Canadian
+79018  # Channing
+78347  # Chapman Ranch
+77426  # Chappell Hill
+78012  # Christine
+76935  # Christoval
+77327  # Cleveland
+75938  # Colmesneil
+78837  # Comstock
+78350  # Dinero
+76836  # Doole
+78851  # Dryden
+78860  # El Indio
+79235  # Floydada
+76041  # Forreston
+79839  # Fort Hancock
+79735  # Fort Stockton
+76131  # Fort Worth
+77552  # Galveston
+78115  # Geronimo
+79518  # Girard
+76844  # Goldthwaite
+79042  # Happy
+78361  # Hebbronville
+79526  # Hermleigh
+77072  # Houston
+76549  # Killeen
+79748  # Knott
+79239  # Lakeview
+75667  # Laneville
+78040  # Laredo
+78873  # Leakey
+79339  # Littlefield
+79842  # Marathon
+79843  # Marfa
+76856  # Mason
+77457  # Matagorda
+78503  # Mcallen
+76665  # Meridian
+78949  # Muldoon
+77460  # Nada
+78141  # Nordheim
+77872  # North Zulch
+79762  # Odessa
+75683  # Ore City
+76943  # Ozona
+79068  # Panhandle
+75856  # Pennington
+79845  # Presidio
+79778  # Rankin
+76682  # Riesel
+78066  # Rio Medina
+76471  # Rising Star
+76567  # Rockdale
+75032  # Rockwall
+76874  # Roosevelt
+78585  # Salineno
+79847  # Salt Flat
+76472  # Santo
+79360  # Seminole
+76951  # Sterling City
+78671  # Stonewall
+77661  # Stowell
+79373  # Tahoka
+75861  # Tennessee Colony
+75790  # Van
+79855  # Van Horn
+79566  # Wingate
+76491  # Woodson
+
+# UT
+84004  # Alpine
+84718  # Cannonville
+84022  # Dugway
+84523  # Ferron
+84027  # Fruitland
+84728  # Garrison
+84525  # Green River
+84635  # Hinckley
+84315  # Hooper
+84533  # Lake Powell
+84648  # Nephi
+84766  # Sevier
+84772  # Summit
+84773  # Teasdale
+84085  # Whiterocks
+
+# VA
+24312  # Austinville
+23921  # Buckingham
+23313  # Capeville
+24070  # Catawba
+22827  # Elkton
+24439  # Goshen
+24557  # Gretna
+23866  # Ivor
+23085  # King And Queen Court House
+22534  # Partlow
+23894  # Wilsons
+
+# VT
+05874  # Westfield
+
+# WA
+99105  # Benge
+98320  # Brinnon
+99122  # Davenport
+98022  # Enumclaw
+98336  # Glenoma
+98252  # Granite Falls
+99141  # Kettle Falls
+98350  # La Push
+98556  # Littlerock
+98827  # Loomis
+98261  # Lopez Island
+98831  # Manson
+99343  # Mesa
+98637  # Nahcotta
+99155  # Nespelem
+98571  # Pacific Beach
+98848  # Quincy
+98943  # South Cle Elum
+99362  # Walla Walla
+98952  # White Swan
+
+# WI
+53916  # Beaver Dam
+53521  # Brooklyn
+54620  # Cataract
+54517  # Clam Lake
+53015  # Cleveland
+53936  # Grand Marsh
+53556  # Lone Rock
+54447  # Lublin
+54454  # Milladore
+53217  # Milwaukee
+54464  # Phlox
+54969  # Readfield
+54868  # Rice Lake
+54764  # Rock Falls
+54564  # Tripoli
+53195  # Zenda
+
+# WV
+25235  # Chloe
+26302  # Clarksburg
+25053  # Danville
+24855  # Kyle
+26282  # Monterville
+25962  # Rainelle
+
+# WY
+82620  # Alcova
+82630  # Arminto
+82321  # Baggs
+82210  # Chugwater
+82925  # Cora
+82635  # Edgerton
+82422  # Emblem
+82514  # Fort Washakie
+82058  # Garrett
+82718  # Gillette
+82935  # Green River
+82310  # Jeffrey City
+83123  # La Barge
+83013  # Moran
+82701  # Newcastle
+82944  # Robertson
+82331  # Saratoga
+82229  # Shawnee
+82442  # Ten Sleep
+82443  # Thermopolis
+82084  # Tie Siding
+82336  # Wamsutter

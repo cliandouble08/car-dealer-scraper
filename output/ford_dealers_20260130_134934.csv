@@ -1,0 +1,24 @@
+brand,name,address,city,state,zip_code,phone,website,dealer_type,distance_miles,search_zip,scrape_date
+Ford,United Ford,"290 Secaucus Road Secaucus, NJ 07094",,,,(201) 255-7119,,Standard,3.48,10001,2026-01-30 13:49:03
+Ford,Starks Ford of Queens,"57-15 Northern Boulevard Woodside, NY 11377",,,,(332) 222-6530,,Standard,5.12,10001,2026-01-30 13:49:03
+Ford,Steven's Jersey City Ford,"740 Route 440 Jersey City, NJ 07304",,,,(201) 479-0105,,Standard,5.29,10001,2026-01-30 13:49:03
+Ford,Quality Auto Mall,"55 State Highway #17 Rutherford, NJ 07070",,,,(201) 514-1379,,Standard,6.94,10001,2026-01-30 13:49:03
+Ford,"Ford of Englewood, Inc.","40 Van Nostrand Avenue Englewood, NJ 07631",,,,(201) 578-5566,,Standard,8.79,10001,2026-01-30 13:49:03
+Ford,Premier Ford Inc,"5001 Glenwood Road Brooklyn, NY 11234",,,,(332) 222-9077,,Standard,9.08,10001,2026-01-30 13:49:03
+Ford,Premier Ford of Bay Ridge,"152 58th Street Brooklyn, NY 11220",,,,(332) 223-5218,,Standard,9.41,10001,2026-01-30 13:49:03
+Ford,All American Ford Inc,"520 River Street Hackensack, NJ 07601",,,,(201) 470-4746,,Standard,9.91,10001,2026-01-30 13:49:03
+Ford,City World Ford,"3305 Boston Road Bronx, NY 10469",,,,(347) 899-2009,,Standard,11.32,10001,2026-01-30 13:49:03
+Ford,Fette Ford,"1137 Route 46 East Clifton, NJ 07013",,,,(862) 281-6094,,Standard,12.45,10001,2026-01-30 13:49:03
+Ford,"Paramus Ford, Inc.","375 Route 17 Paramus, NJ 07652",,,,(201) 350-8443,,Standard,13.78,10001,2026-01-30 13:49:03
+Ford,Gabrielli Truck Sales,"181-25 Eastern Road Jamaica, NY 11430",,,,(718) 487-9307,,Standard,13.99,10001,2026-01-30 13:49:03
+Ford,Tasca Ford Yonkers,"900 Central Avenue Yonkers, NY 10704",,,,(914) 222-0959,,Standard,14.51,10001,2026-01-30 13:49:03
+Ford,Biener Ford,"661 Northern Blvd. Great Neck, NY 11021",,,,(516) 689-0002,,Standard,15.14,10001,2026-01-30 13:49:03
+Ford,Dana Ford,"266 West Service Road Staten Island, NY 10314",,,,(332) 222-8685,,Standard,15.3,10001,2026-01-30 13:49:03
+Ford,Maplecrest Ford of Union,"2800 Springfield Avenue Vauxhall, NJ 07088",,,,(908) 623-4277,,Standard,15.57,10001,2026-01-30 13:49:03
+Ford,Wayne Ford,"444 Route 46 Wayne, NJ 07470",,,,(862) 904-8562,,Standard,15.97,10001,2026-01-30 13:49:03
+Ford,Verner-Cadby Inc,"1240 Bloomfield Av Fairfield, NJ 07004",,,,(862) 348-2568,,Standard,17.93,10001,2026-01-30 13:49:03
+Ford,Crown Ford Inc,"420 Merrick Rd Lynbrook, NY 11563",,,,(516) 202-9766,,Standard,18.27,10001,2026-01-30 13:49:03
+Ford,"Salerno Duane Ford, L.L.C.","245 Broad Street Summit, NJ 07901",,,,(908) 516-3036,,Standard,18.53,10001,2026-01-30 13:49:03
+Ford,Scarsdale Ford,"887 Central Avenue Scarsdale, NY 10583",,,,(914) 521-4703,,Standard,19.03,10001,2026-01-30 13:49:03
+Ford,Woodbridge Ford,"1200 Route 27 Colonia, NJ 07067",,,,(732) 540-1896,,Standard,19.15,10001,2026-01-30 13:49:03
+Ford,Hempstead Ford,"301 N. Franklin Hempstead, NY 11550",,,,(516) 202-9650,,Standard,19.57,10001,2026-01-30 13:49:03
