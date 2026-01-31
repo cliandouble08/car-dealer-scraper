@@ -21,7 +21,7 @@ def find_dealer_locators(brands):
 
     with DDGS() as ddgs:
         for brand in brands:
-            query = f"{brand} official dealer locator"
+            query = f"{brand} dealer locator"
             # We fetch 1 result for the most relevant hit
             search_results = list(ddgs.text(query, max_results=1))
 
