@@ -1,0 +1,120 @@
+# Base Configuration for Dealer Scrapers
+# This file contains default patterns that work across most manufacturer websites
+
+selectors:
+  # Common patterns for search input fields
+  search_input:
+    - "input[placeholder*='Zip']"
+    - "input[placeholder*='zip']"
+    - "input[placeholder*='City']"
+    - "input[placeholder*='city']"
+    - "input[placeholder*='Location']"
+    - "input[placeholder*='location']"
+    - "input[aria-label*='Zip']"
+    - "input[aria-label*='zip']"
+    - "input[aria-label*='City']"
+    - "input[aria-label*='city']"
+    - "input[type='search']"
+    - "input[name*='zip']"
+    - "input[name*='city']"
+    - "input[id*='zip']"
+    - "input[id*='city']"
+    - "input[class*='zip']"
+    - "input[class*='search']"
+
+  # Common patterns for dealer card/list items
+  dealer_cards:
+    - "li[class*='dealer']"
+    - "li[class*='Dealer']"
+    - "div[class*='dealer-card']"
+    - "div[class*='dealerCard']"
+    - "div[class*='dealer_item']"
+    - "div[class*='dealer-item']"
+    - "div[class*='result-item']"
+    - "div[class*='resultItem']"
+    - "article[class*='dealer']"
+    - "div[data-dealer-id]"
+    - "div[data-dealer]"
+    - "[class*='dealer-listing']"
+    - "[class*='dealerListing']"
+
+  # Patterns for "Apply" or "Search" buttons on filter pages
+  apply_button:
+    - "button:contains('Apply')"
+    - "button:contains('apply')"
+    - "button:contains('Search')"
+    - "button:contains('search')"
+    - "button:contains('Find')"
+    - "button:contains('find')"
+    - "button[type='submit']"
+    - "input[type='submit'][value*='Search']"
+    - "input[type='submit'][value*='Apply']"
+    - "button[aria-label*='Search']"
+    - "button[aria-label*='Apply']"
+    - "[role='button'][aria-label*='Search']"
+
+  # Patterns for "View More" / "Load More" buttons
+  view_more_button:
+    - "button:contains('View More')"
+    - "button:contains('view more')"
+    - "button:contains('Load More')"
+    - "button:contains('load more')"
+    - "button:contains('Show More')"
+    - "button:contains('show more')"
+    - "button:contains('See More')"
+    - "button:contains('see more')"
+    - "button:contains('More Results')"
+    - "a:contains('View More')"
+    - "a:contains('Load More')"
+    - "button[aria-label*='more']"
+    - "[class*='view-more']"
+    - "[class*='load-more']"
+
+  # Patterns for scroll containers
+  scroll_container:
+    - "div[class*='results']"
+    - "div[class*='list']"
+    - "div[class*='container']"
+    - "[class*='scroll']"
+    - "[class*='dealer-list']"
+
+interactions:
+  # Default wait times (in seconds)
+  wait_after_page_load: 3
+  wait_after_search: 4
+  wait_after_apply: 3
+  scroll_delay: 0.5
+  view_more_delay: 2
+  click_delay: 0.3
+  max_scroll_iterations: 30
+  max_no_new_count: 3
+
+extraction:
+  # Phone number patterns (regex)
+  phone_patterns:
+    - "\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}"
+    - "\\d{3}[-.\\s]?\\d{3}[-.\\s]?\\d{4}"
+    - "\\+?1[-.\\s]?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}"
+
+  # Name extraction patterns
+  name_patterns:
+    - "^\\d+\\.\\s*(.+)"  # "1. Dealer Name"
+    - "^(.+?)\\s*\\|"  # "Name | Address"
+    - "^(.+?)\\s*$"  # Just the name
+
+  # Address patterns
+  address_patterns:
+    - ".+?,\\s*[A-Za-z\\s]+,\\s*[A-Z]{2}\\s+\\d{5}"
+    - ".+?\\s+[A-Z]{2}\\s+\\d{5}"
+
+  # Distance patterns
+  distance_patterns:
+    - "([\\d.]+)\\s*mi\\b"
+    - "([\\d.]+)\\s*miles?\\b"
+
+  # Website extraction
+  skip_domains:
+    - "maps.google.com"
+    - "google.com"
+    - "tel:"
+    - "mailto:"

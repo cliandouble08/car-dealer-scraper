@@ -1,0 +1,33 @@
+# Ford-specific configuration
+# This overrides base_config.yaml settings when scraping Ford dealerships
+
+manufacturer: Ford
+base_url: https://www.ford.com/dealerships/
+
+selectors:
+  # Ford-specific selectors (if auto-detection fails)
+  search_input:
+    - "input[placeholder*='Zip']"
+    - "input[placeholder*='City']"
+    - "input[aria-label*='Zip']"
+
+  dealer_cards:
+    - "li[class*='dealer']"
+    - "div[class*='dealer-card']"
+    - "div[class*='result-item']"
+    - "article[class*='dealer']"
+
+  scroll_container:
+    - "div.dealer-standard"
+    - "div.bri-style"
+
+interactions:
+  wait_after_search: 4
+  scroll_delay: 0.5
+  view_more_delay: 2
+
+extraction:
+  # Ford-specific name pattern (dealers often numbered)
+  name_patterns:
+    - "^\\d+\\.\\s*(.+)"  # "1. Dealer Name"
+    - "^(.+)$"  # Fallback to full line

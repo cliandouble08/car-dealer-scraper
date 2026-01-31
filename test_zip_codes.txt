@@ -1,0 +1,17 @@
+# Test Zip Codes - Small subset for testing
+# Major cities across different regions
+
+# Northeast
+10001  # New York, NY
+02134  # Boston, MA
+
+# Southeast  
+33101  # Miami, FL
+30303  # Atlanta, GA
+
+# Midwest
+60601  # Chicago, IL
+
+# West
+90001  # Los Angeles, CA
+94102  # San Francisco, CA

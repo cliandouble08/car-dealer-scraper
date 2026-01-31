@@ -13,3 +13,6 @@ pandas>=2.0.0
 
 # Web search for finding dealer locator pages
 duckduckgo-search>=6.0.0
+
+# Configuration file support
+pyyaml>=6.0
