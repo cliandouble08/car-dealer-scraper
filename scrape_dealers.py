@@ -44,6 +44,9 @@ from utils.extraction import (
     extract_phone, parse_address, extract_website_url,
     clean_name, extract_distance
 )
+from utils.jina_reader import get_jina_reader
+from utils.llm_analyzer import get_llm_analyzer
+from utils.dynamic_config import generate_config_from_analysis
 
 
 @dataclass
@@ -72,21 +75,30 @@ class BaseScraper:
         'find more', 'view more', 'load more', 'show more', 'see more'
     ]
 
-    def __init__(self, headless: bool = True, brand: str = ""):
+    def __init__(self, headless: bool = True, brand: str = "", enable_ai: bool = False):
         """
         Initialize the scraper.
 
         Args:
             headless: Run browser in headless mode
             brand: Manufacturer brand name (for config loading)
+            enable_ai: Enable AI features (Jina Reader and LLM analysis)
         """
         self.headless = headless
         self.brand = brand.lower() if brand else ""
+        self.enable_ai = enable_ai
         self.scrape_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.seen_dealers = set()
-        self.config = get_config_manager().get_config(self.brand) if self.brand else {}
-        self.interaction_config = get_config_manager().get_interaction_config(self.brand)
-        self.extraction_config = get_config_manager().get_extraction_config(self.brand)
+        self.config_manager = get_config_manager()
+        self.config = self.config_manager.get_config(self.brand) if self.brand else {}
+        self.interaction_config = self.config_manager.get_interaction_config(self.brand)
+        self.extraction_config = self.config_manager.get_extraction_config(self.brand)
+        # Initialize AI components with enable_ai flag
+        # Create instances and set enabled based on flag (respecting env vars too)
+        from utils.jina_reader import JinaReader
+        from utils.llm_analyzer import LLMAnalyzer
+        self.jina_reader = JinaReader(enabled=enable_ai)
+        self.llm_analyzer = LLMAnalyzer(enabled=enable_ai)
 
     def scrape(self, zip_codes: List[str]) -> List[Dealer]:
         raise NotImplementedError
@@ -125,70 +137,20 @@ class BaseScraper:
         for selector in selectors:
             try:
                 # Handle :contains() pseudo-selector (not valid CSS)
-                if ':contains(' in selector:
-                    # Try to find by text content using XPath
+                if ":contains(" in selector:
                     text_match = re.search(r":contains\('([^']+)'\)", selector)
                     if text_match:
                         text = text_match.group(1)
-                        tag = selector.split(':')[0] if ':' in selector else '*'
-                        xpath = f"//{tag}[contains(text(), '{text}')]"
+                        tag = selector.split(":")[0] if ":" in selector else "*"
+                        xpath = (
+                            f"//{tag}[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{text.lower()}')]"
+                        )
                         elements = driver.find_elements(By.XPATH, xpath)
                     else:
                         continue
                 else:
                     elements = driver.find_elements(By.CSS_SELECTOR, selector)
 
-                for elem in elements:
-                    try:
-                        if elem.is_displayed() and elem.is_enabled():
-                            # Additional validation: check if it's actually an input
-                            tag = elem.tag_name.lower()
-                            if tag == 'input' or (tag == 'div' and elem.get_attribute('contenteditable')):
-                                return elem
-                    except Exception:
-                        continue
-            except Exception:
-                continue
-
-        return None
-
-    def _auto_detect_apply_button(self, driver: webdriver.Chrome) -> Optional[WebElement]:
-        """
-        Auto-detect "Apply" or "Search" button on filter pages.
-
-        Args:
-            driver: Selenium WebDriver instance
-
-        Returns:
-            WebElement if found, None otherwise
-        """
-        selectors = self.config.get('selectors', {}).get('apply_button', [])
-        
-        if not selectors:
-            selectors = [
-                "button[type='submit']",
-                "input[type='submit']",
-                "button[aria-label*='Search']",
-                "button[aria-label*='Apply']",
-            ]
-
-        # Text-based search for buttons
-        button_texts = ['Apply', 'apply', 'Search', 'search', 'Find', 'find', 'Submit', 'submit']
-        
-        # Try CSS selectors first
-        for selector in selectors:
-            try:
-                if ':contains(' in selector:
-                    text_match = re.search(r":contains\('([^']+)'\)", selector)
-                    if text_match:
-                        text = text_match.group(1)
-                        xpath = f"//button[contains(text(), '{text}')] | //input[@type='submit' and contains(@value, '{text}')]"
-                        elements = driver.find_elements(By.XPATH, xpath)
-                    else:
-                        continue
-                else:
-                    elements = driver.find_elements(By.CSS_SELECTOR, selector)
-                
                 for elem in elements:
                     try:
                         if elem.is_displayed() and elem.is_enabled():
@@ -198,15 +160,55 @@ class BaseScraper:
             except Exception:
                 continue
 
-        # Fallback: search all buttons by text
+        return None
+
+    def _auto_detect_apply_button(self, driver: webdriver.Chrome) -> Optional[WebElement]:
+        """
+        Auto-detect apply/search button for advanced filter pages.
+
+        Args:
+            driver: Selenium WebDriver instance
+
+        Returns:
+            WebElement if found, None otherwise
+        """
+        selectors = self.config.get('selectors', {}).get('apply_button', [])
+        button_texts = ["apply", "search", "find", "show results", "view results"]
+
+        for selector in selectors:
+            try:
+                if ":contains(" in selector:
+                    text_match = re.search(r":contains\('([^']+)'\)", selector)
+                    if text_match:
+                        text = text_match.group(1)
+                        xpath = (
+                            f"//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{text.lower()}')]"
+                            f" | //input[@type='submit' and contains(translate(@value, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{text.lower()}')]"
+                            f" | //a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{text.lower()}')]"
+                        )
+                        elements = driver.find_elements(By.XPATH, xpath)
+                    else:
+                        continue
+                else:
+                    elements = driver.find_elements(By.CSS_SELECTOR, selector)
+
+                for elem in elements:
+                    try:
+                        if elem.is_displayed() and elem.is_enabled():
+                            return elem
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+
+        # Fallback: search all buttons by text/value
         try:
             buttons = driver.find_elements(By.TAG_NAME, "button")
             inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='submit']")
-            
             for elem in buttons + inputs:
                 try:
                     text = (elem.text or elem.get_attribute('value') or "").lower()
-                    if any(btn_text.lower() in text for btn_text in button_texts):
+                    if any(btn_text in text for btn_text in button_texts):
                         if elem.is_displayed() and elem.is_enabled():
                             return elem
                 except Exception:
@@ -227,27 +229,28 @@ class BaseScraper:
             WebElement if found, None otherwise
         """
         selectors = self.config.get('selectors', {}).get('view_more_button', [])
-        
-        # Text variations to search for
+
         view_more_texts = [
-            'view more', 'load more', 'show more', 'see more',
-            'more results', 'load additional', 'show additional'
+            "view more", "load more", "show more", "see more",
+            "view more dealers", "more results", "load additional", "show additional"
         ]
 
-        # Try CSS selectors from config
         for selector in selectors:
             try:
-                if ':contains(' in selector:
+                if ":contains(" in selector:
                     text_match = re.search(r":contains\('([^']+)'\)", selector)
                     if text_match:
                         text = text_match.group(1)
-                        xpath = f"//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{text.lower()}')] | //a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{text.lower()}')]"
+                        xpath = (
+                            f"//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{text.lower()}')]"
+                            f" | //a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{text.lower()}')]"
+                        )
                         elements = driver.find_elements(By.XPATH, xpath)
                     else:
                         continue
                 else:
                     elements = driver.find_elements(By.CSS_SELECTOR, selector)
-                
+
                 for elem in elements:
                     try:
                         if elem.is_displayed() and elem.is_enabled():
@@ -261,7 +264,6 @@ class BaseScraper:
         try:
             buttons = driver.find_elements(By.TAG_NAME, "button")
             links = driver.find_elements(By.TAG_NAME, "a")
-            
             for elem in buttons + links:
                 try:
                     text = (elem.text or "").lower()
@@ -290,6 +292,7 @@ class BaseScraper:
         if not selectors:
             selectors = [
                 "li[class*='dealer']", "li[class*='Dealer']",
+                "div[class*='dealer']", "div[class*='Dealer']",
                 "div[class*='dealer-card']", "div[class*='dealerCard']",
                 "div[class*='dealer_item']", "div[class*='dealer-item']",
                 "div[class*='result-item']", "div[class*='resultItem']",
@@ -323,6 +326,51 @@ class BaseScraper:
                 continue
 
         return all_cards
+
+    def _expand_view_more(self, driver: webdriver.Chrome, scroll_container: Optional[WebElement], desired_count: int = 0) -> int:
+        """
+        Click "View More" buttons until they disappear or desired count is reached.
+
+        Args:
+            driver: Selenium WebDriver instance
+            scroll_container: Optional scrollable container element
+            desired_count: Stop clicking when dealer count reaches this number (0 means no limit)
+
+        Returns:
+            Number of times the "View More" button was clicked
+        """
+        max_clicks = 60
+        click_count = 0
+
+        # Use short delays (list loads quickly)
+        if self.enable_ai:
+            view_more_delay = self.interaction_config.get('view_more_delay', 2)
+            content_load_delay = 0.8
+        else:
+            view_more_delay = 0.4
+            content_load_delay = 0.3
+
+        while click_count < max_clicks:
+            if desired_count:
+                current_cards = self._auto_detect_dealer_cards(driver)
+                if len(current_cards) >= desired_count:
+                    break
+
+            view_more_button = self._auto_detect_view_more_button(driver)
+            if not view_more_button:
+                break
+
+            try:
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", view_more_button)
+                time.sleep(0.2)
+                driver.execute_script("arguments[0].click();", view_more_button)
+                click_count += 1
+                time.sleep(view_more_delay)
+                time.sleep(content_load_delay)
+            except Exception:
+                break
+
+        return click_count
 
     def _find_scroll_container(self, driver: webdriver.Chrome) -> Optional[WebElement]:
         """
@@ -372,16 +420,23 @@ class BaseScraper:
             driver: Selenium WebDriver instance
             scroll_container: Optional scrollable container element
         """
-        scroll_delay = self.interaction_config.get('scroll_delay', 0.5)
-        
+        # Use shorter delays when AI is disabled for better performance
+        # But ensure delays are sufficient for lazy loading
+        if self.enable_ai:
+            scroll_delay = self.interaction_config.get('scroll_delay', 0.5)
+        else:
+            scroll_delay = 0.3  # Increased from 0.2 to allow lazy loading
+
         if scroll_container:
+            # Scroll within container
             driver.execute_script(
                 "arguments[0].scrollTop += arguments[0].clientHeight * 0.8;",
                 scroll_container
             )
         else:
-            driver.execute_script("window.scrollBy(0, 500);")
-        
+            # Scroll the page
+            driver.execute_script("window.scrollBy(0, window.innerHeight * 0.8);")
+
         time.sleep(scroll_delay)
 
     def _handle_advanced_search(self, driver: webdriver.Chrome) -> bool:
@@ -394,7 +449,11 @@ class BaseScraper:
         Returns:
             True if apply button was found and clicked, False otherwise
         """
-        wait_after_apply = self.interaction_config.get('wait_after_apply', 3)
+        # Use shorter delays when AI is disabled for better performance
+        if self.enable_ai:
+            wait_after_apply = self.interaction_config.get('wait_after_apply', 3)
+        else:
+            wait_after_apply = 1.0  # Reduced from 3
         
         apply_button = self._auto_detect_apply_button(driver)
         if apply_button:
@@ -409,26 +468,200 @@ class BaseScraper:
 
     def _click_view_more(self, driver: webdriver.Chrome) -> bool:
         """
-        Click "View More" button if present.
+        Click "View More" button if present. Keeps clicking until no more buttons found.
 
         Args:
             driver: Selenium WebDriver instance
 
         Returns:
-            True if button was clicked, False otherwise
+            True if at least one button was clicked, False otherwise
         """
-        view_more_delay = self.interaction_config.get('view_more_delay', 2)
+        # Use shorter delays when AI is disabled for better performance
+        # But ensure delays are sufficient for content to load
+        if self.enable_ai:
+            view_more_delay = self.interaction_config.get('view_more_delay', 2)
+            content_load_delay = 1.0
+        else:
+            view_more_delay = 0.8  # Increased from 0.5 to ensure content loads
+            content_load_delay = 0.5  # Increased from 0.3 to ensure content loads
         
-        view_more_button = self._auto_detect_view_more_button(driver)
-        if view_more_button:
-            try:
-                driver.execute_script("arguments[0].click();", view_more_button)
-                time.sleep(view_more_delay)
-                return True
-            except Exception:
-                pass
+        max_clicks = 10  # Maximum clicks per call to prevent infinite loops
+        clicked_any = False
         
-        return False
+        for _ in range(max_clicks):
+            view_more_button = self._auto_detect_view_more_button(driver)
+            if view_more_button:
+                try:
+                    # Scroll button into view first
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", view_more_button)
+                    time.sleep(0.3)  # Increased from 0.2 to ensure button is visible
+                    
+                    # Click the button
+                    driver.execute_script("arguments[0].click();", view_more_button)
+                    clicked_any = True
+                    time.sleep(view_more_delay)
+                    
+                    # Wait a bit for new content to load
+                    time.sleep(content_load_delay)
+                except Exception:
+                    break
+            else:
+                # No more buttons found
+                break
+        
+        return clicked_any
+
+    def _extract_simple_dealer(self, card: WebElement, search_zip: str) -> Optional[Dealer]:
+        """
+        Fast extraction: use common tags within a card (name, address, phone, website).
+        """
+        try:
+            if not card.is_displayed():
+                return None
+        except Exception:
+            return None
+
+        # Name: prefer header tags, then dealer-name classes
+        name = None
+        name_selectors = "h3, h4, h2, h5, [class*='dealer-name'], [class*='dealerName']"
+        try:
+            for elem in card.find_elements(By.CSS_SELECTOR, name_selectors):
+                text = (elem.text or "").strip()
+                cleaned = clean_name(text, self.SKIP_NAMES)
+                if cleaned:
+                    name = cleaned
+                    break
+        except Exception:
+            pass
+
+        if not name:
+            return None
+
+        # Address: look for address/location classes first
+        full_address = ""
+        city = ""
+        state = ""
+        zip_code = ""
+        address_selectors = (
+            "div[class*='address'], span[class*='address'], "
+            "div[class*='location'], span[class*='location'], "
+            "div[class*='addr'], span[class*='addr']"
+        )
+        try:
+            address_elems = card.find_elements(By.CSS_SELECTOR, address_selectors)
+            for elem in address_elems:
+                text = (elem.text or "").strip()
+                if text and re.search(r'\d{5}', text):
+                    full_address, city, state, zip_code = parse_address(text)
+                    break
+        except Exception:
+            pass
+
+        # Phone: look for tel links
+        phone = ""
+        try:
+            phone_links = card.find_elements(By.CSS_SELECTOR, "a[href^='tel:']")
+            if phone_links:
+                href = phone_links[0].get_attribute("href") or ""
+                phone = href.replace("tel:", "").strip()
+        except Exception:
+            pass
+
+        # Website: first http link in card (not tel/mail)
+        website = ""
+        try:
+            for link in card.find_elements(By.CSS_SELECTOR, "a[href]"):
+                href = (link.get_attribute("href") or "").strip()
+                if href.startswith("http") and "mailto:" not in href and "tel:" not in href:
+                    website = href
+                    break
+        except Exception:
+            pass
+
+        # Dedupe check
+        key = f"{name.lower()}|{full_address.lower()}"
+        if key in self.seen_dealers:
+            return None
+        self.seen_dealers.add(key)
+
+        return Dealer(
+            brand=self.brand.capitalize() if self.brand else "Unknown",
+            name=name,
+            address=full_address,
+            city=city,
+            state=state,
+            zip_code=zip_code,
+            phone=phone,
+            website=website,
+            dealer_type="Standard",
+            distance_miles="",
+            search_zip=search_zip,
+            scrape_date=self.scrape_date,
+        )
+
+    def _analyze_new_site(self, url: str) -> bool:
+        """
+        Analyze a new manufacturer website using LLM to extract scraping patterns.
+
+        Args:
+            url: Manufacturer website URL
+
+        Returns:
+            True if analysis succeeded and config was generated, False otherwise
+        """
+        if not self.brand:
+            return False
+        
+        # Skip AI analysis if disabled
+        if not self.enable_ai:
+            return False
+
+        # Check if LLM config already exists
+        if self.config_manager.has_llm_config(self.brand):
+            print(f"  Using cached LLM config for {self.brand}")
+            # Reload config to include LLM-generated one
+            self.config = self.config_manager.get_config(self.brand)
+            self.interaction_config = self.config_manager.get_interaction_config(self.brand)
+            self.extraction_config = self.config_manager.get_extraction_config(self.brand)
+            return True
+
+        print(f"  Analyzing {self.brand} website with LLM...")
+
+        # Step 1: Fetch page content using Jina Reader
+        content = self.jina_reader.fetch_page_content(
+            url,
+            wait_selector=None,  # Let Jina Reader handle dynamic content
+            timeout=30,
+            streaming=True  # Use streaming for better results with dynamic content
+        )
+
+        # Fallback: If Jina Reader fails, we'll skip LLM analysis
+        if not content:
+            print(f"  Warning: Could not fetch content from Jina Reader, skipping LLM analysis")
+            return False
+
+        # Step 2: Analyze with LLM
+        analysis_result = self.llm_analyzer.analyze_page_structure(content, url)
+        if not analysis_result:
+            print(f"  Warning: LLM analysis failed, falling back to auto-detection")
+            return False
+
+        confidence = analysis_result.get('confidence', 0.0)
+        print(f"  LLM analysis complete (confidence: {confidence:.2f})")
+
+        # Step 3: Generate config from analysis
+        config = generate_config_from_analysis(analysis_result, self.brand, url)
+
+        # Step 4: Cache the config
+        self.config_manager.cache_llm_config(config, self.brand)
+
+        # Step 5: Reload config to use the new LLM-generated one
+        self.config = self.config_manager.get_config(self.brand)
+        self.interaction_config = self.config_manager.get_interaction_config(self.brand)
+        self.extraction_config = self.config_manager.get_extraction_config(self.brand)
+
+        print(f"  LLM-generated config saved and loaded for {self.brand}")
+        return True
 
     def _extract_with_fallback(self, card: WebElement, search_zip: str) -> Optional[Dealer]:
         """
@@ -481,7 +714,7 @@ class BaseScraper:
                     if cleaned:
                         name = cleaned
                         break
-                
+
                 # Pattern: "Dealer Name | Address"
                 match = re.match(r'^(.+?)\s*\|', line)
                 if match:
@@ -498,9 +731,6 @@ class BaseScraper:
                 if cleaned:
                     name = cleaned
                     break
-
-        if not name:
-            return None
 
         # Extract address
         full_address = ""
@@ -567,8 +797,8 @@ class FordScraper(BaseScraper):
     BRAND = "Ford"
     BASE_URL = "https://www.ford.com/dealerships/"
 
-    def __init__(self, headless: bool = True):
-        super().__init__(headless, brand=self.BRAND)
+    def __init__(self, headless: bool = True, enable_ai: bool = False):
+        super().__init__(headless, brand=self.BRAND, enable_ai=enable_ai)
         self.driver = None
 
     def _setup_driver(self):
@@ -592,6 +822,9 @@ class FordScraper(BaseScraper):
         all_dealers = []
         self._setup_driver()
 
+        # Trigger LLM analysis on first visit (before processing zip codes)
+        self._analyze_new_site(self.BASE_URL)
+
         try:
             for i, zip_code in enumerate(zip_codes):
                 print(f"[{i+1}/{len(zip_codes)}] Scraping {self.BRAND} dealers for {zip_code}...")
@@ -603,7 +836,9 @@ class FordScraper(BaseScraper):
                 except Exception as e:
                     print(f"  Error: {e}")
 
-                time.sleep(2)  # Be polite between requests
+                # Use shorter delays when AI is disabled for better performance
+                delay_between_requests = 2.0 if self.enable_ai else 0.5
+                time.sleep(delay_between_requests)
 
         finally:
             if self.driver:
@@ -614,8 +849,19 @@ class FordScraper(BaseScraper):
     def _scrape_zip(self, zip_code: str) -> List[Dealer]:
         dealers = []
 
+        # Use shorter delays when AI is disabled for better performance
+        if self.enable_ai:
+            wait_after_page_load = self.interaction_config.get('wait_after_page_load', 3)
+            click_delay = self.interaction_config.get('click_delay', 0.3)
+            wait_after_search = self.interaction_config.get('wait_after_search', 4)
+            cookie_delay = 1.0
+        else:
+            wait_after_page_load = 1.5  # Reduced from 3
+            click_delay = 0.1  # Reduced from 0.3
+            wait_after_search = 2.0  # Reduced from 4
+            cookie_delay = 0.3  # Reduced from 1.0
+
         # Navigate to page
-        wait_after_page_load = self.interaction_config.get('wait_after_page_load', 3)
         self.driver.get(self.BASE_URL)
         time.sleep(wait_after_page_load)
 
@@ -624,7 +870,7 @@ class FordScraper(BaseScraper):
             cookie_btn = self.driver.find_element(By.ID, "onetrust-accept-btn-handler")
             if cookie_btn.is_displayed():
                 cookie_btn.click()
-                time.sleep(1)
+                time.sleep(cookie_delay)
         except:
             pass
 
@@ -634,7 +880,6 @@ class FordScraper(BaseScraper):
             print(f"  Could not find search input")
             return dealers
 
-        click_delay = self.interaction_config.get('click_delay', 0.3)
         search_box.click()
         search_box.clear()
         time.sleep(click_delay)
@@ -642,53 +887,117 @@ class FordScraper(BaseScraper):
         time.sleep(click_delay)
         search_box.send_keys(Keys.RETURN)
         
-        wait_after_search = self.interaction_config.get('wait_after_search', 4)
         time.sleep(wait_after_search)
 
         # Handle advanced search if present
         self._handle_advanced_search(self.driver)
+
+        # Wait for dealer cards to appear before starting extraction
+        # This ensures the page has loaded initial results
+        try:
+            WebDriverWait(self.driver, 10).until(
+                lambda d: len(self._auto_detect_dealer_cards(d)) > 0
+            )
+            print(f"  Initial dealer cards detected")
+        except Exception:
+            print(f"  Warning: No dealer cards found initially, proceeding anyway...")
 
         # Extract dealers
         dealers = self._extract_dealers(zip_code)
         return dealers
 
     def _extract_dealers(self, zip_code: str) -> List[Dealer]:
+        """
+        Extract all dealers with efficient "View More" and scrolling logic.
+        """
         dealers = []
         seen_names = set()
 
         # Find scroll container using auto-detection
         scroll_container = self._find_scroll_container(self.driver)
 
-        max_iterations = self.interaction_config.get('max_scroll_iterations', 30)
-        max_no_new_count = self.interaction_config.get('max_no_new_count', 3)
-        no_new_count = 0
+        desired_count = self.interaction_config.get('desired_dealer_count', 0)
 
-        for _ in range(max_iterations):
-            # Click "View More" button if present
-            self._click_view_more(self.driver)
+        # Click "View More" until exhausted or desired count reached
+        click_count = self._expand_view_more(self.driver, scroll_container, desired_count)
+        if click_count:
+            print(f"  Clicked 'View More' {click_count} times")
 
-            # Find all dealer cards using auto-detection
-            dealer_cards = self._auto_detect_dealer_cards(self.driver)
-            new_found = False
+        # Scroll to load any lazy-loaded cards
+        stable_checks = 0
+        last_count = 0
+        max_scroll_checks = 8
+        scroll_wait_delay = 0.6 if self.enable_ai else 0.3
 
-            for card in dealer_cards:
-                dealer = self._extract_with_fallback(card, zip_code)
-                if dealer and dealer.name.lower() not in seen_names:
-                    seen_names.add(dealer.name.lower())
-                    dealers.append(dealer)
-                    new_found = True
-
-            if not new_found:
-                no_new_count += 1
-                if no_new_count >= max_no_new_count:
-                    break
+        for _ in range(max_scroll_checks):
+            self._scroll_to_bottom(self.driver, scroll_container)
+            time.sleep(scroll_wait_delay)
+            current_cards = self._auto_detect_dealer_cards(self.driver)
+            current_count = len(current_cards)
+            if current_count == last_count:
+                stable_checks += 1
             else:
-                no_new_count = 0
+                stable_checks = 0
+                last_count = current_count
+            if stable_checks >= 2:
+                break
 
-            # Smart scroll
-            self._smart_scroll(self.driver, scroll_container)
+        # Final extraction pass (single scan for speed)
+        dealer_cards = self._auto_detect_dealer_cards(self.driver)
+        for card in dealer_cards:
+            dealer = self._extract_simple_dealer(card, zip_code)
+            if not dealer:
+                dealer = self._extract_with_fallback(card, zip_code)
+            if dealer and dealer.name.lower() not in seen_names:
+                seen_names.add(dealer.name.lower())
+                dealers.append(dealer)
 
+        print(f"  Extraction complete. Found {len(dealers)} total dealers.")
         return dealers
+
+    def _scroll_to_bottom(self, driver: webdriver.Chrome, scroll_container: Optional[WebElement] = None, force: bool = False):
+        """
+        Scroll to the absolute bottom of the page/container.
+        
+        Args:
+            driver: Selenium WebDriver instance
+            scroll_container: Optional scrollable container element
+            force: If True, scroll multiple times to ensure we reach the bottom
+        """
+        # Use shorter delays when AI is disabled for better performance
+        # But ensure delays are sufficient for lazy loading
+        if self.enable_ai:
+            scroll_delay = self.interaction_config.get('scroll_delay', 0.5)
+        else:
+            scroll_delay = 0.3  # Increased from 0.2 to allow lazy loading
+        
+        if force:
+            # Force scroll multiple times to ensure we reach the absolute bottom
+            for _ in range(3):
+                if scroll_container:
+                    driver.execute_script(
+                        "arguments[0].scrollTop = arguments[0].scrollHeight;",
+                        scroll_container
+                    )
+                else:
+                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(scroll_delay)
+        else:
+            # Normal scroll - scroll progressively to trigger lazy loading
+            if scroll_container:
+                # Get current scroll position
+                current_scroll = driver.execute_script("return arguments[0].scrollTop;", scroll_container)
+                max_scroll = driver.execute_script("return arguments[0].scrollHeight;", scroll_container)
+                client_height = driver.execute_script("return arguments[0].clientHeight;", scroll_container)
+                
+                # Scroll down by 90% of visible height
+                scroll_amount = client_height * 0.9
+                new_scroll = min(current_scroll + scroll_amount, max_scroll)
+                driver.execute_script("arguments[0].scrollTop = arguments[1];", scroll_container, new_scroll)
+            else:
+                # Scroll the page progressively
+                driver.execute_script("window.scrollBy(0, window.innerHeight * 0.9);")
+            time.sleep(scroll_delay)
 
 
 # Registry of available scrapers
@@ -700,24 +1009,24 @@ SCRAPERS = {
 }
 
 
-def _worker_scrape(args: Tuple[str, List[str], bool, int, int]) -> List[Dict]:
+def _worker_scrape(args: Tuple[str, List[str], bool, bool, int, int]) -> List[Dict]:
     """
     Worker function for parallel scraping.
     Runs in a separate process with its own browser instance.
 
     Args:
-        args: Tuple of (brand, zip_codes, headless, worker_id, total_workers)
+        args: Tuple of (brand, zip_codes, headless, enable_ai, worker_id, total_workers)
 
     Returns:
         List of dealer dictionaries
     """
-    brand, zip_codes, headless, worker_id, total_workers = args
+    brand, zip_codes, headless, enable_ai, worker_id, total_workers = args
 
     scraper_class = SCRAPERS.get(brand)
     if not scraper_class:
         return []
 
-    scraper = scraper_class(headless=headless)
+    scraper = scraper_class(headless=headless, enable_ai=enable_ai)
     dealers = []
 
     # Setup driver once for this worker
@@ -744,7 +1053,7 @@ def _worker_scrape(args: Tuple[str, List[str], bool, int, int]) -> List[Dict]:
 
 
 def scrape_parallel(brand: str, zip_codes: List[str], headless: bool = True,
-                    workers: int = 4) -> List[Dealer]:
+                    workers: int = 4, enable_ai: bool = False) -> List[Dealer]:
     """
     Scrape dealers using multiple parallel browser instances.
 
@@ -753,6 +1062,7 @@ def scrape_parallel(brand: str, zip_codes: List[str], headless: bool = True,
         zip_codes: List of zip codes to search
         headless: Run browsers in headless mode
         workers: Number of parallel browser instances
+        enable_ai: Enable AI features (Jina Reader and LLM analysis)
 
     Returns:
         List of deduplicated Dealer objects
@@ -766,7 +1076,7 @@ def scrape_parallel(brand: str, zip_codes: List[str], headless: bool = True,
 
     if workers <= 1:
         # Fall back to sequential for single worker
-        scraper = SCRAPERS[brand](headless=headless)
+        scraper = SCRAPERS[brand](headless=headless, enable_ai=enable_ai)
         return scraper.scrape(zip_codes)
 
     # Split zip codes among workers
@@ -786,7 +1096,7 @@ def scrape_parallel(brand: str, zip_codes: List[str], headless: bool = True,
 
     # Prepare worker arguments
     worker_args = [
-        (brand, chunk, headless, i+1, actual_workers)
+        (brand, chunk, headless, enable_ai, i+1, actual_workers)
         for i, chunk in enumerate(chunks)
     ]
 
@@ -883,6 +1193,10 @@ def main():
                         help="Number of parallel browser instances (default: 1)")
     parser.add_argument("--list-brands", action="store_true",
                         help="List available brands")
+    parser.add_argument("--enable-ai", action="store_true",
+                        help="Enable AI features (Jina Reader and LLM analysis)")
+    parser.add_argument("--disable-ai", action="store_true",
+                        help="Disable AI features, use basic auto-detection only (default: disabled)")
 
     args = parser.parse_args()
 
@@ -894,6 +1208,13 @@ def main():
 
     headless = not args.no_headless
     workers = max(1, args.workers)
+    
+    # Determine AI feature status (default: disabled, only enable if --enable-ai is explicitly used)
+    enable_ai = args.enable_ai and not args.disable_ai
+    if enable_ai:
+        print("AI features enabled - using Jina Reader and LLM analysis")
+    else:
+        print("AI features disabled - using basic auto-detection only")
 
     # Load zip codes
     zip_codes = load_zip_codes(args.zip_codes, args.zip_file)
@@ -922,9 +1243,9 @@ def main():
         print(f"{'='*60}")
 
         if workers > 1:
-            dealers = scrape_parallel(brand, zip_codes, headless=headless, workers=workers)
+            dealers = scrape_parallel(brand, zip_codes, headless=headless, workers=workers, enable_ai=enable_ai)
         else:
-            scraper = SCRAPERS[brand](headless=headless)
+            scraper = SCRAPERS[brand](headless=headless, enable_ai=enable_ai)
             dealers = scraper.scrape(zip_codes)
 
         all_dealers.extend(dealers)

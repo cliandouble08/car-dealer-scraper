@@ -25,10 +25,10 @@ Start with a small test to verify everything works. Use the `test_zip_codes.txt`
 python scrape_dealers.py --brand ford --zip-file test_zip_codes.txt --headless
 
 # Or test with visible browser window (useful for debugging)
-python3 scrape_dealers.py --brand ford --zip-file test_zip_codes.txt --no-headless
+python scrape_dealers.py --brand ford --zip-file test_zip_codes.txt --no-headless
 
 # Test with just a couple zip codes directly
-python3 scrape_dealers.py --brand ford --zip-codes "10001,02134,33101"
+python scrape_dealers.py --brand ford --zip-codes "10001,02134,33101"
 ```
 
 **Expected output:**
@@ -43,13 +43,13 @@ Once testing is successful, run with the full centroid zip code list (1062 zip c
 
 ```bash
 # Full run with single worker (sequential)
-python3 scrape_dealers.py --brand ford --zip-file centroid_zip_codes.txt --headless
+python scrape_dealers.py --brand ford --zip-file centroid_zip_codes.txt --headless
 
 # Full run with 4 parallel workers (recommended for speed)
-python3 scrape_dealers.py --brand ford --zip-file centroid_zip_codes.txt --headless --workers 4
+python scrape_dealers.py --brand ford --zip-file centroid_zip_codes.txt --headless --workers 4
 
 # Full run with 8 parallel workers (faster, but uses more resources)
-python3 scrape_dealers.py --brand ford --zip-file centroid_zip_codes.txt --headless --workers 8
+python scrape_dealers.py --brand ford --zip-file centroid_zip_codes.txt --headless --workers 8
 ```
 
 **Note:** The full run with 1062 zip codes will take several hours. With 4 workers, expect approximately:
@@ -59,7 +59,7 @@ python3 scrape_dealers.py --brand ford --zip-file centroid_zip_codes.txt --headl
 
 ## Command Options
 
-```
+```text
 --brand          Brand to scrape (ford, toyota, etc.) - default: ford
 --zip-codes      Comma-separated zip codes (e.g., "10001,02134")
 --zip-file       File with zip codes (one per line)
@@ -68,28 +68,96 @@ python3 scrape_dealers.py --brand ford --zip-file centroid_zip_codes.txt --headl
 --no-headless    Run browser with visible window
 --workers, -w    Number of parallel browser instances (default: 1)
 --list-brands    List available brands
+--enable-ai      Enable AI features (Jina Reader and LLM analysis) (default: enabled)
+--disable-ai     Disable AI features, use basic auto-detection only
 ```
+
+## AI Features (Jina Reader & LLM Analysis)
+
+The scraper includes intelligent AI-powered features that automatically adapt to different manufacturer websites:
+
+### What It Does
+
+- **Jina Reader**: Converts manufacturer websites into LLM-friendly content
+- **LLM Analysis**: Uses local LLM (Ollama) to analyze page structure and extract CSS selectors
+- **Automatic Adaptation**: No manual configuration needed for new manufacturers
+- **Intelligent Caching**: LLM-generated configs are cached for future use
+
+### Default Behavior
+
+By default, AI features are **enabled**. The scraper will:
+1. Check for cached LLM-generated configs
+2. If not found, use Jina Reader to fetch page content
+3. Analyze with LLM to extract selectors and patterns
+4. Cache the results for future runs
+
+### Disabling AI Features
+
+To use basic auto-detection only (no Jina Reader, no LLM analysis):
+
+```bash
+# Disable AI features - uses only basic auto-detection patterns
+python scrape_dealers.py --brand ford --zip-file test_zip_codes.txt --disable-ai
+```
+
+When disabled, the scraper uses:
+- Manual configs (if exist in `configs/{brand}.yaml`)
+- Base config patterns (`configs/base_config.yaml`)
+- Auto-detection fallbacks
+
+### When to Disable AI Features
+
+Disable AI features if:
+- You want faster scraping without LLM analysis overhead
+- You don't have Ollama installed or running
+- You prefer manual configuration
+- You're experiencing issues with Jina Reader API
+
+### Setting Up AI Features (Optional)
+
+If you want to use AI features, you'll need:
+
+1. **Ollama** (for LLM analysis):
+   ```bash
+   # Install Ollama
+   curl -fsSL https://ollama.ai/install.sh | sh
+   
+   # Pull a model
+   ollama pull llama3
+   
+   # Start Ollama server
+   ollama serve
+   ```
+
+2. **Internet connection** (for Jina Reader API)
+
+See `LLM_FEATURES.md` for detailed setup instructions.
 
 ## Examples
 
 ### Example 1: Quick test with 3 zip codes
 ```bash
-python3 scrape_dealers.py --brand ford --zip-codes "10001,02134,33101" --no-headless
+python scrape_dealers.py --brand ford --zip-codes "10001,02134,33101" --no-headless
 ```
 
 ### Example 2: Test with sample zip codes file
 ```bash
-python3 scrape_dealers.py --brand ford --zip-file sample_zip_codes.txt --headless
+python scrape_dealers.py --brand ford --zip-file sample_zip_codes.txt --headless
 ```
 
 ### Example 3: Full production run with parallel workers
 ```bash
-python3 scrape_dealers.py --brand ford --zip-file centroid_zip_codes.txt --headless --workers 4
+python scrape_dealers.py --brand ford --zip-file centroid_zip_codes.txt --headless --workers 4
 ```
 
 ### Example 4: Check available brands
 ```bash
-python3 scrape_dealers.py --list-brands
+python scrape_dealers.py --list-brands
+```
+
+### Example 5: Run with AI features disabled (basic auto-detection)
+```bash
+python scrape_dealers.py --brand ford --zip-file test_zip_codes.txt --disable-ai
 ```
 
 ## Output Files

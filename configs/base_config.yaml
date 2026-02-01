@@ -57,6 +57,8 @@ selectors:
   view_more_button:
     - "button:contains('View More')"
     - "button:contains('view more')"
+    - "button:contains('View More Dealers')"
+    - "button:contains('view more dealers')"
     - "button:contains('Load More')"
     - "button:contains('load more')"
     - "button:contains('Show More')"
