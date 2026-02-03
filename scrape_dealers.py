@@ -29,7 +29,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 from config_manager import get_config_manager
 from utils.dynamic_config import generate_config_from_analysis
@@ -71,7 +71,12 @@ class GenericDealerScraper:
         'search by', 'location', 'name', 'clear', 'advanced search',
         'view map', 'make my dealer', 'chat with dealer', 'dealer website',
         'find more', 'view more', 'load more', 'show more', 'see more',
-        'locate dealer', 'find a dealer', 'dealer locator', 'search dealers'
+        'locate dealer', 'find a dealer', 'dealer locator', 'search dealers',
+        'zip code', 'use current location', 'update matches',
+        'filter by services', 'dealerships found', 'dealers found',
+        'available vehicles', 'available dealer services',
+        "today's sales hours", 'sales & services hours',
+        'view dealer inventory', 'get directions', 'miles away'
     ]
 
     def __init__(
@@ -92,6 +97,7 @@ class GenericDealerScraper:
         self.domain = self._extract_domain(url)
         self.headless = headless
         self.enable_ai = enable_ai
+        self.debug = os.getenv("SCRAPER_DEBUG", "false").lower() == "true"
         self.scrape_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.seen_dealers = set()
 
@@ -119,6 +125,26 @@ class GenericDealerScraper:
         parsed = urlparse(url)
         return parsed.netloc.replace('www.', '')
 
+    @staticmethod
+    def _is_jina_404_content(content: str) -> bool:
+        """Detect Jina Reader 404 content payloads."""
+        if not content:
+            return False
+        content_lower = content.lower()
+        return (
+            "target url returned error 404" in content_lower
+            or "\n404\n" in content_lower
+            or "sorry! this page does not exist" in content_lower
+        )
+
+    @staticmethod
+    def _normalize_locator_path(path: str) -> str:
+        """Normalize locator path for deduplication."""
+        if not path:
+            return ""
+        normalized = path.strip().rstrip('/')
+        return normalized.lower()
+
     async def analyze_site(self) -> bool:
         """
         Analyze the website structure using Jina Reader and LLM.
@@ -131,22 +157,101 @@ class GenericDealerScraper:
             self._load_default_config()
             return False
 
-        # Check if config already exists
+        # Step 0: Check if config already exists for initial domain
+        # Note: We check again after discovery if the domain changes
         if self.config_manager.has_llm_config(self.domain):
             print(f"  Using cached LLM config for {self.domain}")
             self._load_cached_config()
+
+            # Check if we should redirect based on cached config
+            cached_base_url = self.config.get('base_url')
+            if cached_base_url:
+                # If cached URL is a sub-path of current URL (e.g. /dealers vs /), redirect
+                # Or if they are different and current is root-ish
+                cached_path = urlparse(cached_base_url).path.rstrip('/')
+                current_path = urlparse(self.url).path.rstrip('/')
+                
+                # If cached path is longer/more specific than current path, use it
+                if len(cached_path) > len(current_path) and self.domain == self._extract_domain(cached_base_url):
+                    print(f"  > Redirecting to known locator URL from cache: {cached_base_url}")
+                    self.url = cached_base_url
+                    return True
+
+            # If URLs match or no better URL in cache, we assume cache is good for current URL
             return True
 
         print(f"  Analyzing {self.url} with LLM...")
 
-        # Step 1: Fetch and save content using Jina Reader
+        # Step 1: Fetch content for initial analysis/discovery
         artifacts = self.jina_reader.save_analysis_artifacts(self.url)
         if not artifacts or not artifacts.get('content'):
             print(f"  Warning: Could not fetch content, using default selectors")
             self._load_default_config()
             return False
 
-        # Step 2: Analyze with LLM
+        # Step 2: Locator Discovery (Is this the right page?)
+        print("  Checking if this is the dealer locator page...")
+        discovery_result = self.llm_analyzer.find_dealer_locator_url(
+            artifacts['content'],
+            self.url
+        )
+
+        if discovery_result and not discovery_result.get('is_locator', False):
+            locator_path = discovery_result.get('locator_url')
+            locator_candidates = discovery_result.get('locator_candidates', [])
+            candidate_paths = []
+            seen_candidates = set()
+            for candidate in [locator_path] + locator_candidates:
+                normalized = self._normalize_locator_path(candidate)
+                if not normalized or normalized in seen_candidates:
+                    continue
+                seen_candidates.add(normalized)
+                candidate_paths.append(candidate)
+
+            for locator_path in candidate_paths:
+                # Construct full URL
+                new_url = urljoin(self.url, locator_path)
+                print(f"  > Discovery: Redirecting to actual locator: {new_url}")
+
+                # Update scraper state
+                self.url = new_url
+                self.domain = self._extract_domain(new_url)
+
+                # Check cache for the new domain
+                if self.config_manager.has_llm_config(self.domain):
+                    print(f"  Using cached LLM config for {self.domain}")
+                    self._load_cached_config()
+                    return True
+
+                # Re-fetch content for the actual locator page
+                print(f"  Fetching content from locator: {self.url}...")
+                artifacts = self.jina_reader.save_analysis_artifacts(self.url)
+                if not artifacts or not artifacts.get('content'):
+                    print(
+                        "  Warning: Could not fetch locator content, "
+                        "trying next candidate if available"
+                    )
+                    continue
+                if self._is_jina_404_content(artifacts.get('content', '')):
+                    print(
+                        "  Warning: Locator returned 404 content, "
+                        "trying next candidate if available"
+                    )
+                    artifacts = None
+                    continue
+                break
+
+            if not artifacts or not artifacts.get('content'):
+                print(
+                    "  Warning: Could not fetch locator content, "
+                    "using default selectors"
+                )
+                self._load_default_config()
+                return False
+        else:
+             print("  Confirmed: This appears to be the dealer locator page.")
+
+        # Step 3: Analyze page structure with LLM
         analysis_result = self.llm_analyzer.analyze_page_structure(
             artifacts['content'],
             self.url
@@ -159,14 +264,14 @@ class GenericDealerScraper:
         confidence = analysis_result.get('confidence', 0.0)
         print(f"  LLM analysis complete (confidence: {confidence:.2f})")
 
-        # Step 3: Generate and cache config
+        # Step 4: Generate and cache config
         config = generate_config_from_analysis(analysis_result, self.domain, self.url)
         self.config_manager.cache_llm_config(config, self.domain)
 
-        # Step 4: Save analysis summary for troubleshooting
+        # Step 5: Save analysis summary for troubleshooting
         self._save_analysis_summary(analysis_result, artifacts.get('content_path', ''))
 
-        # Step 5: Load the config
+        # Step 6: Load the config
         self._load_cached_config()
         print(f"  LLM-generated config saved for {self.domain}")
 
@@ -401,6 +506,13 @@ class GenericDealerScraper:
         # Handle cookie popup
         await self._handle_cookie_popup()
 
+        # Handle location modal/popup if present (e.g., Acura prompt)
+        await self._handle_location_prompt(zip_code)
+
+        # Optional debug: log candidate inputs and frames
+        if self.debug:
+            await self._debug_log_inputs()
+
         # Find and fill search input
         search_input = await self._find_search_input()
         if not search_input:
@@ -413,6 +525,7 @@ class GenericDealerScraper:
             await asyncio.sleep(click_delay)
             await search_input.fill(zip_code)
             await asyncio.sleep(click_delay)
+            await self._select_zip_suggestion(search_input, zip_code)
 
             # Execute search sequence
             search_sequence = self.interactions.get('search_sequence', ['fill_input', 'press_enter'])
@@ -442,6 +555,14 @@ class GenericDealerScraper:
             )
         except Exception:
             print(f"  Warning: No dealer cards found initially")
+            if await self._handle_search_this_area_button():
+                try:
+                    await self.page.wait_for_selector(
+                        self._get_dealer_card_selector(),
+                        timeout=10000
+                    )
+                except Exception:
+                    print(f"  Warning: No dealer cards found after map search")
 
         # Expand results (View More / scroll)
         await self._expand_results()
@@ -470,6 +591,321 @@ class GenericDealerScraper:
             except Exception:
                 continue
 
+    async def _handle_search_this_area_button(self) -> bool:
+        """Click a map-based 'Search This Area' button if present."""
+        button_selectors = [
+            "button:has-text('Search This Area')",
+            "button:has-text('Search this area')",
+            "button[aria-label*='search this area' i]",
+            "button[title*='search this area' i]",
+        ]
+        try:
+            button = await self._find_visible_element(button_selectors)
+            if button:
+                await button.click()
+                await asyncio.sleep(self.interactions.get('wait_after_search', 2))
+                return True
+        except Exception:
+            return False
+        return False
+
+    async def _handle_location_prompt(self, zip_code: str) -> bool:
+        """Handle location modal that requires zip input before results load."""
+        dialog = await self._find_visible_dialog()
+        if not dialog:
+            return False
+
+        input_selectors = [
+            "input[placeholder*='ZIP' i]",
+            "input[placeholder*='zip' i]",
+            "input[aria-label*='ZIP' i]",
+            "input[name*='zip' i]",
+            "input[id*='zip' i]",
+        ]
+        modal_input = await self._find_visible_element(input_selectors, root=dialog)
+        if not modal_input:
+            return False
+
+        try:
+            await modal_input.click()
+            await modal_input.fill('')
+            await asyncio.sleep(0.2)
+            await modal_input.fill(zip_code)
+            await asyncio.sleep(0.2)
+            await self._select_zip_suggestion(modal_input, zip_code, root=dialog)
+
+            # Try submit via Enter first
+            try:
+                await modal_input.press('Enter')
+            except Exception:
+                pass
+
+            # Try an explicit search button if present
+            button_selectors = [
+                "button[type='submit']",
+                "button:has-text('Search')",
+                "button:has-text('Find')",
+                "button[aria-label*='search' i]",
+                "button[title*='search' i]",
+            ]
+            modal_button = await self._find_visible_element(button_selectors, root=dialog)
+            if modal_button:
+                await modal_button.click()
+
+            await asyncio.sleep(self.interactions.get('wait_after_search', 2))
+            return True
+        except Exception:
+            return False
+
+    async def _select_zip_suggestion(self, input_element, zip_code: str, root=None) -> bool:
+        """Select a suggested zip option if a dropdown appears."""
+        suggestion_wait = self.interactions.get('suggestion_wait', 0.8)
+        max_attempts = self.interactions.get('suggestion_attempts', 2)
+        container_selectors = [
+            "[role='listbox']",
+            ".pac-container",
+            ".ui-menu",
+            ".autocomplete-suggestions",
+            ".suggestions",
+            "[class*='suggest']",
+            "[id*='suggest']",
+            "[class*='autocomplete']",
+            "[class*='typeahead']",
+        ]
+        option_selectors = [
+            "[role='option']",
+            "li[role='option']",
+            "li[role='menuitem']",
+            ".pac-item",
+            ".ui-menu-item",
+            ".ui-menu-item-wrapper",
+            ".autocomplete-suggestion",
+            ".suggestion",
+            "li",
+        ]
+
+        for _ in range(max_attempts):
+            container = await self._find_visible_element(container_selectors, root=root)
+            if not container and root is not None:
+                container = await self._find_visible_element(container_selectors)
+
+            if container:
+                option = await self._find_visible_suggestion_option(
+                    container,
+                    option_selectors,
+                    zip_code=zip_code
+                )
+                if not option:
+                    option = await self._find_visible_suggestion_option(
+                        container,
+                        option_selectors
+                    )
+                if option:
+                    try:
+                        await option.click()
+                        await asyncio.sleep(0.2)
+                        return True
+                    except Exception:
+                        pass
+
+                try:
+                    await input_element.press('ArrowDown')
+                    await asyncio.sleep(0.1)
+                    await input_element.press('Enter')
+                    await asyncio.sleep(0.2)
+                    return True
+                except Exception:
+                    pass
+
+            await asyncio.sleep(suggestion_wait)
+
+        return False
+
+    async def _find_visible_suggestion_option(self, container, selectors, zip_code: str = ""):
+        """Find a visible suggestion option inside a container."""
+        zip_code_lower = zip_code.lower()
+        for selector in selectors:
+            try:
+                elements = await container.query_selector_all(selector)
+                for element in elements:
+                    if not await element.is_visible():
+                        continue
+                    if zip_code_lower:
+                        try:
+                            text = (await element.inner_text()).strip().lower()
+                        except Exception:
+                            text = ""
+                        if text and zip_code_lower in text:
+                            return element
+                    else:
+                        return element
+            except Exception:
+                continue
+        return None
+
+    async def _find_visible_dialog(self):
+        """Find a visible modal/dialog container."""
+        dialog_selectors = [
+            "[role='dialog']",
+            "[aria-modal='true']",
+            ".modal",
+            "[class*='modal']",
+            "[class*='popup']",
+        ]
+        for selector in dialog_selectors:
+            try:
+                elements = await self.page.query_selector_all(selector)
+                for element in elements:
+                    if await element.is_visible():
+                        return element
+            except Exception:
+                continue
+        return None
+
+    async def _find_visible_element(self, selectors, root=None):
+        """Find the first visible element matching any selector."""
+        search_root = root or self.page
+        for selector in selectors:
+            try:
+                elements = await search_root.query_selector_all(selector)
+                for element in elements:
+                    if await element.is_visible():
+                        return element
+            except Exception:
+                continue
+
+        if root is None:
+            element = await self._find_visible_element_in_frames(selectors)
+            if element:
+                return element
+            return await self._find_visible_element_in_shadow_dom(selectors)
+        return None
+
+    async def _find_visible_element_in_frames(self, selectors):
+        """Find the first visible element matching selectors in nested frames."""
+        try:
+            frames = self.page.frames
+        except Exception:
+            return None
+
+        for frame in frames:
+            if frame == self.page.main_frame:
+                continue
+            for selector in selectors:
+                try:
+                    elements = await frame.query_selector_all(selector)
+                    for element in elements:
+                        if await element.is_visible():
+                            return element
+                except Exception:
+                    continue
+        return None
+
+    async def _find_visible_element_in_shadow_dom(self, selectors):
+        """Find the first visible element matching selectors in shadow DOM."""
+        script = """
+        (selectors) => {
+            function isVisible(el) {
+                if (!el || !el.getBoundingClientRect) {
+                    return false;
+                }
+                const style = window.getComputedStyle(el);
+                if (!style || style.display === 'none' || style.visibility === 'hidden') {
+                    return false;
+                }
+                const rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            }
+
+            const roots = [document];
+            while (roots.length) {
+                const root = roots.shift();
+                if (!root || !root.querySelectorAll) {
+                    continue;
+                }
+                for (const selector of selectors) {
+                    const matches = root.querySelectorAll(selector);
+                    for (const el of matches) {
+                        if (isVisible(el)) {
+                            return el;
+                        }
+                    }
+                }
+                const all = root.querySelectorAll('*');
+                for (const el of all) {
+                    if (el.shadowRoot) {
+                        roots.push(el.shadowRoot);
+                    }
+                }
+            }
+            return null;
+        }
+        """
+        for frame in self.page.frames:
+            try:
+                handle = await frame.evaluate_handle(script, selectors)
+                element = handle.as_element()
+                if element:
+                    return element
+            except Exception:
+                continue
+        return None
+
+    async def _debug_log_inputs(self):
+        """Log candidate input elements and frame URLs for debugging."""
+        selectors = self.selectors.get('search_input', [])
+        fallbacks = [
+            "input[placeholder*='Zip' i]",
+            "input[placeholder*='zip' i]",
+            "input[placeholder*='City' i]",
+            "input[placeholder*='Location' i]",
+            "input[aria-label*='Zip' i]",
+            "input[type='search']",
+            "input[name*='zip' i]",
+            "input[id*='zip' i]",
+        ]
+        all_selectors = selectors + fallbacks
+
+        print("  [debug] Searching for input candidates...")
+        await self._debug_log_inputs_in_frame(self.page.main_frame, all_selectors)
+
+        for frame in self.page.frames:
+            if frame == self.page.main_frame:
+                continue
+            await self._debug_log_inputs_in_frame(frame, all_selectors)
+
+    async def _debug_log_inputs_in_frame(self, frame, selectors):
+        """Log candidate inputs in a specific frame."""
+        try:
+            frame_url = frame.url
+        except Exception:
+            frame_url = "<unknown>"
+
+        candidates = []
+        for selector in selectors:
+            try:
+                elements = await frame.query_selector_all(selector)
+                for element in elements:
+                    try:
+                        if not await element.is_visible():
+                            continue
+                        attrs = {
+                            "id": await element.get_attribute("id"),
+                            "name": await element.get_attribute("name"),
+                            "placeholder": await element.get_attribute("placeholder"),
+                            "type": await element.get_attribute("type"),
+                        }
+                        candidates.append((selector, attrs))
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+
+        if candidates:
+            print(f"  [debug] Frame: {frame_url}")
+            for selector, attrs in candidates[:10]:
+                print(f"  [debug] selector={selector} attrs={attrs}")
+
     async def _find_search_input(self):
         """Find the search input field."""
         selectors = self.selectors.get('search_input', [])
@@ -488,13 +924,9 @@ class GenericDealerScraper:
 
         all_selectors = selectors + fallbacks
 
-        for selector in all_selectors:
-            try:
-                element = await self.page.query_selector(selector)
-                if element and await element.is_visible():
-                    return element
-            except Exception:
-                continue
+        element = await self._find_visible_element(all_selectors)
+        if element:
+            return element
 
         return None
 
@@ -512,13 +944,9 @@ class GenericDealerScraper:
 
         all_selectors = selectors + fallbacks
 
-        for selector in all_selectors:
-            try:
-                element = await self.page.query_selector(selector)
-                if element and await element.is_visible():
-                    return element
-            except Exception:
-                continue
+        element = await self._find_visible_element(all_selectors)
+        if element:
+            return element
 
         return None
 
@@ -637,9 +1065,25 @@ class GenericDealerScraper:
         dealers = []
         seen_keys = set()
 
-        # Get all dealer cards
-        card_selector = self._get_dealer_card_selector()
-        cards = await self.page.query_selector_all(card_selector)
+        # Get all dealer cards (try all selectors, then frames if needed)
+        selectors = self.selectors.get('dealer_cards', [])
+        if not selectors:
+            selectors = [
+                "div[class*='dealer']",
+                "li[class*='dealer']",
+                "article[class*='result']",
+            ]
+
+        cards = []
+        for selector in selectors:
+            try:
+                cards.extend(await self.page.query_selector_all(selector))
+            except Exception:
+                continue
+
+        if not cards:
+            cards = await self._query_selector_all_in_frames(selectors)
+
         print(f"  Processing {len(cards)} dealer cards...")
 
         for card in cards:
@@ -655,6 +1099,30 @@ class GenericDealerScraper:
                 continue
 
         return dealers
+
+    async def _query_selector_all_in_frames(self, selectors):
+        """Query selectors across nested frames."""
+        results = []
+        try:
+            frames = self.page.frames
+        except Exception:
+            return results
+
+        for frame in frames:
+            if frame == self.page.main_frame:
+                continue
+            for selector in selectors:
+                try:
+                    elements = await frame.query_selector_all(selector)
+                    for element in elements:
+                        try:
+                            if await element.is_visible():
+                                results.append(element)
+                        except Exception:
+                            continue
+                except Exception:
+                    continue
+        return results
 
     async def _extract_dealer_from_card(self, card, zip_code: str) -> Optional[Dealer]:
         """
@@ -725,6 +1193,11 @@ class GenericDealerScraper:
 
         # Extract distance
         distance = extract_distance(card_text)
+
+        # Skip cards that don't look like dealer entries
+        has_address = bool(full_address or zip_code_found or (city and state))
+        if not has_address and not phone and not website:
+            return None
 
         # Dealer type
         text_lower = card_text.lower()

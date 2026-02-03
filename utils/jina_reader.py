@@ -20,8 +20,11 @@ class JinaReader:
 
     BASE_URL = "https://r.jina.ai/"
     DEFAULT_TIMEOUT = 30
+    EXTENDED_TIMEOUT = 60  # Extended timeout for retry attempts
     MAX_RETRIES = 3
     RETRY_DELAY = 2
+    RATE_LIMIT_DELAY = 10  # Delay when rate limited (429)
+    RATE_LIMIT_MAX_RETRIES = 2  # Additional retries for rate limiting
 
     def __init__(self, enabled: bool = True):
         """
@@ -35,6 +38,8 @@ class JinaReader:
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
         })
+        # Track domains that have rate limited us
+        self._rate_limited_domains = {}
 
     def fetch_page_content(
         self,
@@ -61,6 +66,16 @@ class JinaReader:
         if not url or not url.startswith(('http://', 'https://')):
             return None
 
+        # Extract domain to check for rate limiting
+        domain = self.extract_domain(url)
+        
+        # Check if this domain was recently rate limited
+        if domain in self._rate_limited_domains:
+            last_limited = self._rate_limited_domains[domain]
+            if time.time() - last_limited < self.RATE_LIMIT_DELAY * 2:
+                print(f"  Skipping {domain} - recently rate limited, waiting...")
+                time.sleep(self.RATE_LIMIT_DELAY)
+
         timeout = timeout or self.DEFAULT_TIMEOUT
         jina_url = f"{self.BASE_URL}{url}"
 
@@ -72,30 +87,108 @@ class JinaReader:
         if streaming:
             headers['Accept'] = 'text/event-stream'
 
-        for attempt in range(self.MAX_RETRIES):
-            try:
-                if streaming:
-                    response = self._fetch_streaming(jina_url, headers, timeout)
-                else:
-                    response = self.session.get(jina_url, headers=headers, timeout=timeout)
-                    response.raise_for_status()
-                    response = response.text
+        # Try with streaming first, then fallback to non-streaming
+        modes_to_try = [streaming]
+        if streaming:
+            modes_to_try.append(False)  # Fallback to non-streaming
 
-                return response
+        for use_streaming in modes_to_try:
+            current_headers = headers.copy()
+            if use_streaming:
+                current_headers['Accept'] = 'text/event-stream'
+            elif 'Accept' in current_headers:
+                del current_headers['Accept']
 
-            except requests.exceptions.Timeout:
-                if attempt < self.MAX_RETRIES - 1:
-                    time.sleep(self.RETRY_DELAY)
-                    continue
-                print(f"Warning: Jina Reader timeout for {url}")
-                return None
+            for attempt in range(self.MAX_RETRIES):
+                # Exponential backoff delay
+                delay = self.RETRY_DELAY * (2 ** attempt)
+                current_timeout = timeout if attempt == 0 else self.EXTENDED_TIMEOUT
 
-            except requests.exceptions.RequestException as e:
-                if attempt < self.MAX_RETRIES - 1:
-                    time.sleep(self.RETRY_DELAY)
-                    continue
-                print(f"Warning: Jina Reader error for {url}: {e}")
-                return None
+                try:
+                    if use_streaming:
+                        response = self._fetch_streaming(jina_url, current_headers, current_timeout)
+                    else:
+                        resp = self.session.get(jina_url, headers=current_headers, timeout=current_timeout)
+                        
+                        # Handle rate limiting (429)
+                        if resp.status_code == 429:
+                            self._rate_limited_domains[domain] = time.time()
+                            retry_after = int(resp.headers.get('Retry-After', self.RATE_LIMIT_DELAY))
+                            print(f"  Rate limited (429) for {domain}, waiting {retry_after}s...")
+                            time.sleep(retry_after)
+                            if attempt < self.MAX_RETRIES - 1:
+                                continue
+                            else:
+                                return None
+                        
+                        resp.raise_for_status()
+                        response = resp.text
+
+                    # Check if we got a valid response (not an error page)
+                    if response and len(response) > 100:
+                        return response
+                    elif response:
+                        # Got something but it's very short - might be an error
+                        # Check for common error indicators
+                        lower_resp = response.lower()
+                        if any(err in lower_resp for err in ['security checkpoint', 'access denied', 'blocked']):
+                            print(f"  Warning: Got blocked/security response for {url}")
+                            if attempt < self.MAX_RETRIES - 1:
+                                time.sleep(delay * 2)  # Wait longer for security blocks
+                                continue
+                            return None
+                        return response
+
+                except requests.exceptions.Timeout:
+                    if attempt < self.MAX_RETRIES - 1:
+                        print(f"  Timeout (attempt {attempt + 1}/{self.MAX_RETRIES}), retrying in {delay}s...")
+                        time.sleep(delay)
+                        continue
+                    # If streaming timed out, we'll try non-streaming in outer loop
+                    if use_streaming and not streaming:
+                        print(f"  Streaming timeout, will try non-streaming...")
+                        break
+                    print(f"Warning: Jina Reader timeout for {url}")
+                    return None
+
+                except requests.exceptions.HTTPError as e:
+                    status_code = e.response.status_code if e.response else None
+                    
+                    # Handle specific HTTP errors
+                    if status_code == 429:
+                        self._rate_limited_domains[domain] = time.time()
+                        retry_after = int(e.response.headers.get('Retry-After', self.RATE_LIMIT_DELAY))
+                        print(f"  Rate limited (429) for {domain}, waiting {retry_after}s...")
+                        time.sleep(retry_after)
+                        if attempt < self.MAX_RETRIES - 1:
+                            continue
+                    elif status_code in [502, 503, 504]:
+                        # Server errors - retry with backoff
+                        if attempt < self.MAX_RETRIES - 1:
+                            print(f"  Server error ({status_code}), retrying in {delay}s...")
+                            time.sleep(delay)
+                            continue
+                    elif status_code == 403:
+                        # Forbidden - likely blocked, wait longer
+                        if attempt < self.MAX_RETRIES - 1:
+                            print(f"  Forbidden (403), retrying in {delay * 2}s...")
+                            time.sleep(delay * 2)
+                            continue
+                    
+                    print(f"Warning: Jina Reader HTTP error for {url}: {e}")
+                    if use_streaming and False in modes_to_try:
+                        break  # Try non-streaming
+                    return None
+
+                except requests.exceptions.RequestException as e:
+                    if attempt < self.MAX_RETRIES - 1:
+                        print(f"  Request error (attempt {attempt + 1}/{self.MAX_RETRIES}): {e}")
+                        time.sleep(delay)
+                        continue
+                    print(f"Warning: Jina Reader error for {url}: {e}")
+                    if use_streaming and False in modes_to_try:
+                        break  # Try non-streaming
+                    return None
 
         return None
 

@@ -4,10 +4,11 @@
 # Usage: python scrape_dealers.py --websites websites.txt --zip-file centroid_zip_codes.txt
 
 # Ford
-https://www.ford.com/dealerships/
+# https://www.ford.com/dealerships/
+https://www.ford.com/
 
 # Toyota (example - uncomment to use)
-# https://www.toyota.com/dealers/
+https://www.toyota.com/
 
 # Honda (example - uncomment to use)
 # https://www.honda.com/find-a-dealer
