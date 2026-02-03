@@ -9,8 +9,10 @@ Converts any URL to an LLM-friendly input with https://r.jina.ai/
 import os
 import time
 import requests
+from datetime import datetime
+from pathlib import Path
 from typing import Optional, Dict, Any
-from urllib.parse import quote
+from urllib.parse import urlparse
 
 
 class JinaReader:
@@ -153,6 +155,85 @@ class JinaReader:
         except Exception as e:
             print(f"Warning: Failed to fetch screenshot for {url}: {e}")
             return None
+
+    def save_analysis_artifacts(
+        self,
+        url: str,
+        base_dir: str = "data/analysis",
+        streaming: bool = True
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Fetch page content and save to disk for troubleshooting.
+
+        Args:
+            url: URL to fetch and analyze
+            base_dir: Base directory for saving artifacts
+            streaming: Whether to use streaming mode for content fetch
+
+        Returns:
+            Dict with 'content', 'content_path', 'domain' or None
+        """
+        if not self.enabled:
+            return None
+
+        if not url or not url.startswith(('http://', 'https://')):
+            return None
+
+        # Extract domain for directory naming
+        parsed = urlparse(url)
+        domain = parsed.netloc.replace('www.', '')
+
+        # Create directory structure
+        domain_dir = Path(base_dir) / domain
+        domain_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate timestamp for file naming
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        result = {
+            'url': url,
+            'domain': domain,
+            'timestamp': timestamp,
+            'content': None,
+            'content_path': None,
+        }
+
+        # Fetch content
+        print(f"  Fetching content from {url}...")
+        content = self.fetch_page_content(url, streaming=streaming)
+        if content:
+            result['content'] = content
+            content_path = domain_dir / f"{timestamp}_content.txt"
+            try:
+                with open(content_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                result['content_path'] = str(content_path)
+                print(f"  Saved content to {content_path}")
+            except Exception as e:
+                print(f"  Warning: Failed to save content: {e}")
+
+        # Return None if we couldn't get content
+        if not result['content']:
+            print(f"  Warning: Could not fetch content from {url}")
+            return None
+
+        return result
+
+    @staticmethod
+    def extract_domain(url: str) -> str:
+        """
+        Extract clean domain from URL.
+
+        Args:
+            url: Full URL
+
+        Returns:
+            Clean domain name (without www.)
+        """
+        if not url:
+            return ""
+        parsed = urlparse(url)
+        return parsed.netloc.replace('www.', '')
 
 
 # Global instance

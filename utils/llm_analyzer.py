@@ -18,8 +18,8 @@ class LLMAnalyzer:
     """Analyzes page structure using local LLM to extract scraping patterns."""
 
     DEFAULT_ENDPOINT = "http://localhost:11434/api/generate"
-    DEFAULT_MODEL = "llama3"
-    DEFAULT_TIMEOUT = 120  # LLM analysis can take time
+    DEFAULT_MODEL = "gemma2:2b"  # Using Gemma2 2B (fast, no thinking mode)
+    DEFAULT_TIMEOUT = 120  # Timeout for LLM analysis
 
     def __init__(
         self,
@@ -83,14 +83,14 @@ class LLMAnalyzer:
         Returns:
             Formatted prompt string
         """
-        # Truncate content if too long (keep first 8000 chars for context)
-        content_preview = content[:8000] if len(content) > 8000 else content
-        if len(content) > 8000:
+        # Truncate content to keep prompt manageable (4000 chars max)
+        content_preview = content[:4000] if len(content) > 4000 else content
+        if len(content) > 4000:
             content_preview += "\n\n[... content truncated ...]"
 
         domain = urlparse(url).netloc
 
-        prompt = f"""You are analyzing a car dealership locator website to extract CSS selectors and interaction patterns for web scraping.
+        prompt = f"""You are analyzing a car dealership locator website to extract CSS selectors, interaction patterns, and data field locations for web scraping.
 
 Website URL: {url}
 Domain: {domain}
@@ -98,41 +98,91 @@ Domain: {domain}
 Page Content (LLM-friendly format):
 {content_preview}
 
-Your task is to analyze this page and identify the CSS selectors and patterns needed to scrape dealer information. Return ONLY valid JSON in this exact format:
+Your task is to analyze this page and identify EVERYTHING needed to scrape dealer information. Return ONLY valid JSON in this exact format:
 
 {{
   "selectors": {{
     "search_input": ["CSS selector 1", "CSS selector 2"],
-    "dealer_cards": ["CSS selector 1", "CSS selector 2"],
+    "search_button": ["CSS selector 1"],
     "apply_button": ["CSS selector 1"],
     "view_more_button": ["CSS selector 1"],
+    "dealer_cards": ["CSS selector 1", "CSS selector 2"],
     "scroll_container": ["CSS selector 1"]
   }},
+  "data_fields": {{
+    "name": {{
+      "selector": "CSS selector within dealer card",
+      "type": "text",
+      "fallback_patterns": ["h2", "h3", "[class*='name']"]
+    }},
+    "address": {{
+      "selector": "CSS selector within dealer card",
+      "type": "text",
+      "fallback_patterns": ["[class*='address']", "[class*='location']"]
+    }},
+    "phone": {{
+      "selector": "CSS selector within dealer card",
+      "type": "href",
+      "attribute": "href",
+      "fallback_patterns": ["a[href^='tel:']", "[class*='phone']"]
+    }},
+    "website": {{
+      "selector": "CSS selector within dealer card",
+      "type": "href",
+      "attribute": "href",
+      "fallback_patterns": ["a[href^='http']", "[class*='website']"]
+    }}
+  }},
   "interactions": {{
+    "search_sequence": ["fill_input", "press_enter"],
+    "pagination_type": "view_more",
     "wait_after_search": 4,
+    "wait_after_page_load": 3,
     "scroll_delay": 0.5,
-    "view_more_delay": 2
+    "view_more_delay": 2,
+    "click_delay": 0.3
+  }},
+  "input_fields": {{
+    "zip_code": {{
+      "selector": "CSS selector",
+      "type": "text",
+      "required": true
+    }},
+    "radius": {{
+      "selector": "CSS selector for radius dropdown if exists",
+      "type": "select",
+      "required": false,
+      "default_value": "50"
+    }}
   }},
   "extraction": {{
-    "name_patterns": ["regex pattern 1", "regex pattern 2"],
-    "phone_patterns": ["regex pattern 1"],
-    "address_patterns": ["regex pattern 1"]
+    "name_patterns": ["regex pattern 1"],
+    "phone_patterns": ["\\\\(?\\\\d{{3}}\\\\)?[-.\\\\s]?\\\\d{{3}}[-.\\\\s]?\\\\d{{4}}"],
+    "address_patterns": [".+?,\\\\s*[A-Za-z\\\\s]+,\\\\s*[A-Z]{{2}}\\\\s+\\\\d{{5}}"]
   }},
   "confidence": 0.85,
-  "notes": "Additional observations"
+  "notes": "Additional observations about the page structure"
 }}
 
-Guidelines:
-1. For search_input: Look for input fields where users enter zip codes or city names. Common patterns: input[placeholder*='zip'], input[type='search'], input[name*='zip']
-2. For dealer_cards: Look for list items or divs containing dealer information. Common patterns: li[class*='dealer'], div[class*='dealer-card'], article[class*='dealer']
-3. For apply_button: Look for buttons that apply filters or submit search. Common patterns: button[type='submit'], button:contains('Apply'), button:contains('Search')
-4. For view_more_button: Look for pagination or "load more" buttons. Common patterns: button:contains('View More'), button:contains('Load More')
-5. For scroll_container: Look for scrollable divs containing the dealer list. Common patterns: div[class*='results'], div[class*='list']
-6. Use valid CSS selectors. For text matching, use XPath-style patterns in notes.
-7. Confidence should be 0.0-1.0 based on how certain you are about the selectors.
-8. If you cannot find something, use empty array [] or reasonable defaults.
+IMPORTANT Guidelines:
+1. **search_input**: Input field for zip codes/city. Look for: input[placeholder*='zip'], input[name*='zip'], input[id*='location']
+2. **search_button**: Button to submit search. May be: button[type='submit'], button containing 'Search', 'Find', 'Go'
+3. **apply_button**: Button to apply filters (if separate from search). Look for: button containing 'Apply', 'Filter'
+4. **view_more_button**: Pagination button. Look for: button containing 'View More', 'Load More', 'Show More', 'See More'
+5. **dealer_cards**: Container for each dealer. Look for: li[class*='dealer'], div[class*='dealer'], article[class*='result']
+6. **data_fields**: Within each dealer card, identify WHERE each piece of info is located:
+   - name: Usually in h2, h3, h4, or div with 'name' class
+   - address: Often has 'address', 'location', or contains street/city/state/zip pattern
+   - phone: Look for tel: links or elements with 'phone' class
+   - website: External links (not to same domain) or elements with 'website' class
+7. **interactions.search_sequence**: List the steps needed: ["fill_input", "click_search"] or ["fill_input", "press_enter"]
+8. **interactions.pagination_type**: One of "view_more", "scroll", "pagination", or "none"
+9. **input_fields**: If there's a radius/distance dropdown, identify it
+10. Use valid CSS selectors. The "type" field indicates if we should get text content or an attribute value.
+11. **confidence**: 0.0-1.0 based on how certain you are about the selectors
+12. If something doesn't exist, use null or empty array []
 
-Return ONLY the JSON, no additional text or markdown formatting."""
+Return ONLY the JSON, no additional text or markdown formatting. /no_think"""
 
         return prompt
 
@@ -212,7 +262,9 @@ Return ONLY the JSON, no additional text or markdown formatting."""
             # Ensure required keys exist with defaults
             result = {
                 'selectors': analysis.get('selectors', {}),
+                'data_fields': analysis.get('data_fields', {}),
                 'interactions': analysis.get('interactions', {}),
+                'input_fields': analysis.get('input_fields', {}),
                 'extraction': analysis.get('extraction', {}),
                 'confidence': analysis.get('confidence', 0.5),
                 'notes': analysis.get('notes', '')
@@ -223,10 +275,64 @@ Return ONLY the JSON, no additional text or markdown formatting."""
                 result['selectors'] = {}
 
             # Ensure all selector types exist
-            for selector_type in ['search_input', 'dealer_cards', 'apply_button', 
-                                 'view_more_button', 'scroll_container']:
+            for selector_type in ['search_input', 'search_button', 'dealer_cards',
+                                  'apply_button', 'view_more_button', 'scroll_container']:
                 if selector_type not in result['selectors']:
                     result['selectors'][selector_type] = []
+
+            # Ensure data_fields has required keys with defaults
+            if not isinstance(result['data_fields'], dict):
+                result['data_fields'] = {}
+
+            default_data_fields = {
+                'name': {
+                    'selector': None,
+                    'type': 'text',
+                    'fallback_patterns': ['h2', 'h3', 'h4', "[class*='name']"]
+                },
+                'address': {
+                    'selector': None,
+                    'type': 'text',
+                    'fallback_patterns': ["[class*='address']", "[class*='location']"]
+                },
+                'phone': {
+                    'selector': None,
+                    'type': 'href',
+                    'attribute': 'href',
+                    'fallback_patterns': ["a[href^='tel:']", "[class*='phone']"]
+                },
+                'website': {
+                    'selector': None,
+                    'type': 'href',
+                    'attribute': 'href',
+                    'fallback_patterns': ["a[href^='http']", "[class*='website']"]
+                }
+            }
+            for field, defaults in default_data_fields.items():
+                if field not in result['data_fields']:
+                    result['data_fields'][field] = defaults
+                else:
+                    # Ensure all keys exist in the field
+                    for key, value in defaults.items():
+                        if key not in result['data_fields'][field]:
+                            result['data_fields'][field][key] = value
+
+            # Ensure interactions has required keys
+            if not isinstance(result['interactions'], dict):
+                result['interactions'] = {}
+
+            default_interactions = {
+                'search_sequence': ['fill_input', 'press_enter'],
+                'pagination_type': 'view_more',
+                'wait_after_search': 4,
+                'wait_after_page_load': 3,
+                'scroll_delay': 0.5,
+                'view_more_delay': 2,
+                'click_delay': 0.3
+            }
+            for key, value in default_interactions.items():
+                if key not in result['interactions']:
+                    result['interactions'][key] = value
 
             return result
 

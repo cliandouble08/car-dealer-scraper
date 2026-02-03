@@ -1,10 +1,9 @@
 # Dealer Scraper Requirements
 
-# Browser automation
-selenium>=4.15.0
-webdriver-manager>=4.0.0
+# Browser automation (Playwright)
+playwright>=1.40.0
 
-# HTTP requests (for API-based scraping)
+# HTTP requests (for Jina Reader API)
 requests>=2.31.0
 
 # Zip code database for coverage generation

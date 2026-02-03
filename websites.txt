@@ -1,0 +1,16 @@
+# Dealer Locator Websites
+# One URL per line, comments start with #
+#
+# Usage: python scrape_dealers.py --websites websites.txt --zip-file centroid_zip_codes.txt
+
+# Ford
+https://www.ford.com/dealerships/
+
+# Toyota (example - uncomment to use)
+# https://www.toyota.com/dealers/
+
+# Honda (example - uncomment to use)
+# https://www.honda.com/find-a-dealer
+
+# Chevrolet (example - uncomment to use)
+# https://www.chevrolet.com/dealer-locator

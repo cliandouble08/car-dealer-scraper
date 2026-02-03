@@ -15,7 +15,7 @@ from pathlib import Path
 
 def generate_config_from_analysis(
     analysis_result: Dict[str, Any],
-    brand: str,
+    site_key: str,
     url: str
 ) -> Dict[str, Any]:
     """
@@ -23,21 +23,23 @@ def generate_config_from_analysis(
 
     Args:
         analysis_result: LLM analysis output
-        brand: Manufacturer brand name
+        site_key: Site identifier (brand name or domain)
         url: Source URL
 
     Returns:
         Configuration dictionary ready for YAML serialization
     """
     config = {
-        'manufacturer': brand.capitalize(),
+        'site': site_key,
         'base_url': url,
         'generated_by': 'llm_analyzer',
         'generated_date': datetime.now().isoformat(),
         'confidence': analysis_result.get('confidence', 0.5),
         'notes': analysis_result.get('notes', ''),
         'selectors': {},
+        'data_fields': {},
         'interactions': {},
+        'input_fields': {},
         'extraction': {}
     }
 
@@ -50,13 +52,60 @@ def generate_config_from_analysis(
             if validated:
                 config['selectors'][selector_type] = validated
 
-    # Process interactions
+    # Process data_fields (for extracting dealer info from cards)
+    data_fields = analysis_result.get('data_fields', {})
+    if isinstance(data_fields, dict):
+        for field_name, field_config in data_fields.items():
+            if isinstance(field_config, dict):
+                # Validate field config
+                validated_field = {}
+                if 'selector' in field_config and field_config['selector']:
+                    validated_field['selector'] = field_config['selector']
+                if 'type' in field_config:
+                    validated_field['type'] = field_config['type']
+                if 'attribute' in field_config:
+                    validated_field['attribute'] = field_config['attribute']
+                if 'fallback_patterns' in field_config:
+                    patterns = field_config['fallback_patterns']
+                    if isinstance(patterns, list):
+                        validated_field['fallback_patterns'] = [
+                            p for p in patterns if _is_valid_selector(p)
+                        ]
+                if validated_field:
+                    config['data_fields'][field_name] = validated_field
+
+    # Process interactions (including new fields)
     interactions = analysis_result.get('interactions', {})
     if isinstance(interactions, dict):
-        config['interactions'] = {
-            k: v for k, v in interactions.items()
-            if isinstance(v, (int, float)) and v >= 0
-        }
+        processed_interactions = {}
+        for k, v in interactions.items():
+            # Handle numeric values
+            if isinstance(v, (int, float)) and v >= 0:
+                processed_interactions[k] = v
+            # Handle string values (like search_sequence, pagination_type)
+            elif isinstance(v, str):
+                processed_interactions[k] = v
+            # Handle list values (like search_sequence)
+            elif isinstance(v, list):
+                processed_interactions[k] = v
+        config['interactions'] = processed_interactions
+
+    # Process input_fields (for zip code, radius, etc.)
+    input_fields = analysis_result.get('input_fields', {})
+    if isinstance(input_fields, dict):
+        for field_name, field_config in input_fields.items():
+            if isinstance(field_config, dict):
+                validated_field = {}
+                if 'selector' in field_config and field_config['selector']:
+                    validated_field['selector'] = field_config['selector']
+                if 'type' in field_config:
+                    validated_field['type'] = field_config['type']
+                if 'required' in field_config:
+                    validated_field['required'] = bool(field_config['required'])
+                if 'default_value' in field_config:
+                    validated_field['default_value'] = field_config['default_value']
+                if validated_field:
+                    config['input_fields'][field_name] = validated_field
 
     # Process extraction patterns
     extraction = analysis_result.get('extraction', {})
@@ -93,7 +142,7 @@ def _is_valid_selector(selector: str) -> bool:
 
 def save_dynamic_config(
     config: Dict[str, Any],
-    brand: str,
+    site_key: str,
     cache_dir: str = "configs/llm_generated"
 ) -> Optional[Path]:
     """
@@ -101,7 +150,7 @@ def save_dynamic_config(
 
     Args:
         config: Configuration dictionary
-        brand: Manufacturer brand name
+        site_key: Site identifier (brand name or domain)
         cache_dir: Cache directory path
 
     Returns:
@@ -111,7 +160,9 @@ def save_dynamic_config(
         cache_path = Path(cache_dir)
         cache_path.mkdir(parents=True, exist_ok=True)
 
-        filename = f"{brand.lower()}_llm.yaml"
+        # Sanitize site_key for filename (replace dots with underscores)
+        safe_name = site_key.lower().replace('.', '_').replace('/', '_')
+        filename = f"{safe_name}_llm.yaml"
         file_path = cache_path / filename
 
         with open(file_path, 'w', encoding='utf-8') as f:
@@ -126,14 +177,14 @@ def save_dynamic_config(
 
 
 def load_dynamic_config(
-    brand: str,
+    site_key: str,
     cache_dir: str = "configs/llm_generated"
 ) -> Optional[Dict[str, Any]]:
     """
     Load dynamically generated config from cache.
 
     Args:
-        brand: Manufacturer brand name
+        site_key: Site identifier (brand name or domain)
         cache_dir: Cache directory path
 
     Returns:
@@ -141,7 +192,9 @@ def load_dynamic_config(
     """
     try:
         cache_path = Path(cache_dir)
-        filename = f"{brand.lower()}_llm.yaml"
+        # Sanitize site_key for filename
+        safe_name = site_key.lower().replace('.', '_').replace('/', '_')
+        filename = f"{safe_name}_llm.yaml"
         file_path = cache_path / filename
 
         if not file_path.exists():

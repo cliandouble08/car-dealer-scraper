@@ -1,5 +1,5 @@
 # Base Configuration for Dealer Scrapers
-# This file contains default patterns that work across most manufacturer websites
+# This file contains default patterns that work across most dealer locator websites
 
 selectors:
   # Common patterns for search input fields
@@ -22,6 +22,15 @@ selectors:
     - "input[class*='zip']"
     - "input[class*='search']"
 
+  # Patterns for search/submit buttons
+  search_button:
+    - "button[type='submit']"
+    - "button:has-text('Search')"
+    - "button:has-text('Find')"
+    - "button:has-text('Go')"
+    - "input[type='submit']"
+    - "[aria-label*='Search']"
+
   # Common patterns for dealer card/list items
   dealer_cards:
     - "li[class*='dealer']"
@@ -33,6 +42,7 @@ selectors:
     - "div[class*='result-item']"
     - "div[class*='resultItem']"
     - "article[class*='dealer']"
+    - "article[class*='result']"
     - "div[data-dealer-id]"
     - "div[data-dealer]"
     - "[class*='dealer-listing']"
@@ -40,35 +50,20 @@ selectors:
 
   # Patterns for "Apply" or "Search" buttons on filter pages
   apply_button:
-    - "button:contains('Apply')"
-    - "button:contains('apply')"
-    - "button:contains('Search')"
-    - "button:contains('search')"
-    - "button:contains('Find')"
-    - "button:contains('find')"
+    - "button:has-text('Apply')"
+    - "button:has-text('Filter')"
+    - "button:has-text('Show Results')"
     - "button[type='submit']"
-    - "input[type='submit'][value*='Search']"
     - "input[type='submit'][value*='Apply']"
-    - "button[aria-label*='Search']"
-    - "button[aria-label*='Apply']"
-    - "[role='button'][aria-label*='Search']"
 
   # Patterns for "View More" / "Load More" buttons
   view_more_button:
-    - "button:contains('View More')"
-    - "button:contains('view more')"
-    - "button:contains('View More Dealers')"
-    - "button:contains('view more dealers')"
-    - "button:contains('Load More')"
-    - "button:contains('load more')"
-    - "button:contains('Show More')"
-    - "button:contains('show more')"
-    - "button:contains('See More')"
-    - "button:contains('see more')"
-    - "button:contains('More Results')"
-    - "a:contains('View More')"
-    - "a:contains('Load More')"
-    - "button[aria-label*='more']"
+    - "button:has-text('View More')"
+    - "button:has-text('Load More')"
+    - "button:has-text('Show More')"
+    - "button:has-text('See More')"
+    - "a:has-text('View More')"
+    - "a:has-text('Load More')"
     - "[class*='view-more']"
     - "[class*='load-more']"
 
@@ -80,7 +75,48 @@ selectors:
     - "[class*='scroll']"
     - "[class*='dealer-list']"
 
+# Data field selectors within dealer cards
+data_fields:
+  name:
+    selector: null
+    type: text
+    fallback_patterns:
+      - "h2"
+      - "h3"
+      - "h4"
+      - "[class*='name']"
+      - "[class*='title']"
+  address:
+    selector: null
+    type: text
+    fallback_patterns:
+      - "[class*='address']"
+      - "[class*='location']"
+      - "[class*='addr']"
+  phone:
+    selector: null
+    type: href
+    attribute: href
+    fallback_patterns:
+      - "a[href^='tel:']"
+      - "[class*='phone']"
+      - "[class*='tel']"
+  website:
+    selector: null
+    type: href
+    attribute: href
+    fallback_patterns:
+      - "a[href^='http']"
+      - "[class*='website']"
+      - "[class*='site']"
+
 interactions:
+  # Search behavior
+  search_sequence:
+    - fill_input
+    - press_enter
+  pagination_type: view_more  # Options: view_more, scroll, pagination, none
+  
   # Default wait times (in seconds)
   wait_after_page_load: 3
   wait_after_search: 4
@@ -90,6 +126,18 @@ interactions:
   click_delay: 0.3
   max_scroll_iterations: 30
   max_no_new_count: 3
+
+# Input fields configuration
+input_fields:
+  zip_code:
+    selector: null  # Use search_input selectors
+    type: text
+    required: true
+  radius:
+    selector: null
+    type: select
+    required: false
+    default_value: "50"
 
 extraction:
   # Phone number patterns (regex)
@@ -114,7 +162,7 @@ extraction:
     - "([\\d.]+)\\s*mi\\b"
     - "([\\d.]+)\\s*miles?\\b"
 
-  # Website extraction
+  # Website extraction - domains to skip
   skip_domains:
     - "maps.google.com"
     - "google.com"
