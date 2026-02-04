@@ -104,8 +104,35 @@ class Crawl4AIDiscovery:
             viewport_height=1080,
         )
 
+        # Wait for browser verification (Cloudflare, etc.) to complete
+        # Uses JS condition that checks for common verification indicators
+        # Includes 5-second initial delay to let verification page render
+        wait_for_verification = """js:(() => {
+            // Initial 5-second delay before checking - let verification page render
+            if (!window._crawl4ai_start_time) {
+                window._crawl4ai_start_time = Date.now();
+            }
+            const elapsed = Date.now() - window._crawl4ai_start_time;
+            if (elapsed < 5000) return false;  // Wait at least 5 seconds
+            
+            // Check if Cloudflare challenge is present
+            const cfChallenge = document.querySelector('#challenge-running, .cf-browser-verification, #cf-wrapper');
+            if (cfChallenge && cfChallenge.offsetParent !== null) return false;
+            
+            // Check for other common verification/loading states
+            const loadingIndicators = document.querySelectorAll('[class*="loading"], [class*="spinner"], [id*="challenge"]');
+            for (const el of loadingIndicators) {
+                if (el.offsetParent !== null && el.innerText.toLowerCase().includes('verif')) return false;
+            }
+            
+            // Ensure body has meaningful content (more than just scripts/styles)
+            const bodyText = document.body?.innerText?.trim() || '';
+            return bodyText.length > 100;
+        })()"""
+
         crawler_config = CrawlerRunConfig(
-            page_timeout=30000,
+            page_timeout=60000,  # 60 seconds for slow-loading sites with verification
+            wait_for=wait_for_verification,
             remove_overlay_elements=True,
         )
 

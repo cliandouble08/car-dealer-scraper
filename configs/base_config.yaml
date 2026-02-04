@@ -1,6 +1,80 @@
 # Base Configuration for Dealer Scrapers
 # This file contains default patterns that work across most dealer locator websites
 
+# Cookie Consent Banner Handling
+cookie_consent:
+  enabled: true
+  selectors:
+    # OneTrust
+    - '#onetrust-accept-btn-handler'
+    - '#onetrust-banner-sdk button[id*="accept"]'
+    - '.onetrust-close-btn-handler'
+    
+    # CookieBot
+    - '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll'
+    - '#CybotCookiebotDialogBodyButtonAccept'
+    - '#CybotCookiebotDialogBodyLevelButtonAccept'
+    
+    # TrustArc
+    - '#truste-consent-button'
+    - '.trustarc-agree-btn'
+    
+    # Cookie Law Info (WordPress plugin)
+    - '#cookielawinfo-checkbox-accept'
+    - '#cookie_action_close_header'
+    
+    # HubSpot
+    - '#hs-eu-confirmation-button'
+    
+    # Osano Cookie Consent
+    - '.cc-accept-all'
+    - '.cc-btn.cc-allow'
+    
+    # Quantcast
+    - '.qc-cmp2-summary-buttons button[mode="primary"]'
+    
+    # Didomi
+    - '#didomi-notice-agree-button'
+    
+    # Termly
+    - '[data-tid="banner-accept"]'
+    
+    # Generic data-testid patterns
+    - '[data-testid="cookie-accept"]'
+    - '[data-testid="accept-cookies"]'
+    - '[data-testid="cookie-banner-accept"]'
+    
+    # Generic text-based patterns (Playwright :has-text)
+    - 'button:has-text("Accept All")'
+    - 'button:has-text("Accept all")'
+    - 'button:has-text("Accept All Cookies")'
+    - 'button:has-text("Accept Cookies")'
+    - 'button:has-text("Allow All")'
+    - 'button:has-text("Allow all")'
+    - 'button:has-text("I Accept")'
+    - 'button:has-text("I Agree")'
+    - 'button:has-text("Agree")'
+    - 'button:has-text("Got it")'
+    - 'button:has-text("OK")'
+    
+    # Generic class/ID patterns
+    - '[class*="cookie-consent"] button[class*="accept"]'
+    - '[class*="cookie-banner"] button[class*="accept"]'
+    - '[class*="cookie-notice"] button[class*="accept"]'
+    - '[class*="gdpr"] button[class*="accept"]'
+    - '[id*="cookie-accept"]'
+    - '[id*="accept-cookie"]'
+    
+    # Fallback generic patterns
+    - '[class*="cookie"] button'
+    - '[id*="cookie"] button'
+    
+  interactions:
+    wait_for_banner: 2       # seconds to wait for banner to appear
+    wait_after_click: 0.5    # seconds to wait after clicking accept
+    max_retries: 2           # number of retry attempts
+    check_iframes: true      # search for consent banners in iframes
+
 selectors:
   # Common patterns for search input fields
   search_input:
@@ -162,7 +236,7 @@ interactions:
   
   # Default wait times (in seconds)
   wait_after_page_load: 3
-  wait_after_search: 4
+  wait_after_search: 8
   wait_after_apply: 3
   scroll_delay: 0.5
   view_more_delay: 2

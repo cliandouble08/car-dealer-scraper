@@ -83,6 +83,195 @@ class LLMAnalyzer:
             print(f"Error during LLM analysis: {e}")
             return None
 
+    def analyze_html_structure(self, html: str, url: str) -> Optional[Dict[str, Any]]:
+        """
+        Analyze actual HTML DOM structure to extract scraping patterns.
+        
+        This is more accurate than analyzing text content because it sees
+        the real CSS classes, IDs, and element hierarchy.
+
+        Args:
+            html: Raw HTML content from the page
+            url: Original URL for context
+
+        Returns:
+            Dictionary with selectors, interactions, and extraction patterns
+        """
+        if not self.enabled:
+            return None
+
+        if not html or len(html) < 100:
+            print("Warning: HTML too short for analysis")
+            return None
+
+        # Extract relevant HTML sections (focus on dealer-related content)
+        relevant_html = self._extract_relevant_html(html)
+        
+        prompt = self._build_html_analysis_prompt(relevant_html, url)
+
+        try:
+            response = self._call_llm(prompt)
+            if not response:
+                return None
+
+            analysis = self._parse_llm_response(response)
+            if analysis:
+                return analysis
+
+            # Retry with smaller HTML snippet
+            print("Warning: LLM response parsing failed, retrying with smaller HTML")
+            smaller_html = self._extract_relevant_html(html, max_chars=4000)
+            concise_prompt = self._build_html_analysis_prompt(smaller_html, url, concise=True)
+            response = self._call_llm(concise_prompt)
+            if not response:
+                return None
+            return self._parse_llm_response(response)
+
+        except Exception as e:
+            print(f"Error during HTML analysis: {e}")
+            return None
+
+    def _extract_relevant_html(self, html: str, max_chars: int = 12000) -> str:
+        """
+        Extract HTML sections most likely to contain dealer information.
+        
+        Looks for elements with dealer-related classes/IDs and extracts
+        a representative sample of the DOM structure.
+        """
+        if not html or len(html) <= max_chars:
+            return html
+        
+        # Keywords that indicate dealer-related content
+        dealer_keywords = [
+            'dealer', 'location', 'store', 'result', 'card', 'list-item',
+            'retailer', 'showroom', 'branch', 'outlet'
+        ]
+        
+        # Try to find HTML sections containing these keywords
+        import re
+        
+        # Find opening tags with dealer-related attributes
+        tag_pattern = r'<([a-z]+[0-9]*)\s+[^>]*(?:class|id)=["\'][^"\']*(?:' + '|'.join(dealer_keywords) + r')[^"\']*["\'][^>]*>'
+        matches = list(re.finditer(tag_pattern, html, re.IGNORECASE))
+        
+        if not matches:
+            # Fall back to looking for any section with these keywords
+            for keyword in dealer_keywords:
+                idx = html.lower().find(keyword)
+                if idx > 0:
+                    # Extract context around this keyword
+                    start = max(0, idx - 2000)
+                    end = min(len(html), idx + 8000)
+                    return html[start:end]
+            
+            # Last resort: return first chunk of HTML
+            return html[:max_chars]
+        
+        # Extract sections around found matches
+        extracted = []
+        total_len = 0
+        
+        for match in matches[:10]:  # Limit to first 10 matches
+            start = max(0, match.start() - 500)
+            end = min(len(html), match.end() + 3000)
+            chunk = html[start:end]
+            
+            if total_len + len(chunk) > max_chars:
+                break
+                
+            extracted.append(chunk)
+            total_len += len(chunk)
+        
+        if extracted:
+            return "\n\n<!-- ... -->\n\n".join(extracted)
+        
+        return html[:max_chars]
+
+    def _build_html_analysis_prompt(self, html: str, url: str, concise: bool = False) -> str:
+        """
+        Build a prompt for analyzing HTML structure.
+        """
+        domain = urlparse(url).netloc
+        
+        prompt = f"""You are analyzing the HTML DOM structure of a car dealership locator website to extract CSS selectors for web scraping.
+
+Website URL: {url}
+Domain: {domain}
+
+HTML Structure (relevant sections):
+```html
+{html}
+```
+
+Your task is to identify the EXACT CSS selectors from the HTML above. Look at the actual class names, IDs, and element hierarchy.
+
+Return ONLY valid JSON in this exact format:
+
+{{
+  "selectors": {{
+    "search_input": ["exact CSS selector from HTML"],
+    "search_button": ["exact CSS selector from HTML"],
+    "dealer_cards": ["exact CSS selector for the repeating dealer container elements"],
+    "view_more_button": ["exact CSS selector if present"]
+  }},
+  "data_fields": {{
+    "name": {{
+      "selector": "CSS selector within dealer card for dealer name",
+      "type": "text"
+    }},
+    "address": {{
+      "selector": "CSS selector within dealer card for address",
+      "type": "text"
+    }},
+    "phone": {{
+      "selector": "CSS selector for phone (look for tel: links)",
+      "type": "href",
+      "attribute": "href"
+    }},
+    "website": {{
+      "selector": "CSS selector for dealer website link",
+      "type": "href",
+      "attribute": "href"
+    }}
+  }},
+  "interactions": {{
+    "search_sequence": ["fill_input", "press_enter"],
+    "pagination_type": "scroll",
+    "wait_after_search": 8,
+    "wait_after_page_load": 3
+  }},
+  "confidence": 0.9,
+  "notes": "Brief description of the HTML structure found"
+}}
+
+CRITICAL Guidelines:
+1. **dealer_cards**: Find the REPEATING element that wraps each dealer. Look for:
+   - Elements with class names containing: dealer, location, store, result, card, item, retailer
+   - The element should repeat once per dealer listing
+   - Common patterns: <li class="...">, <div class="...">, <article class="...">
+   
+2. **data_fields**: Within each dealer card, identify:
+   - name: Usually in h1-h4 or an element with 'name', 'title' in class
+   - address: Element with 'address', 'location', 'street' in class
+   - phone: Look for <a href="tel:..."> links
+   - website: External <a href="http..."> links or elements with 'website', 'url' in class
+
+3. Use the EXACT class names from the HTML. For example:
+   - If you see `<li class="dealer-result__item">`, use `li.dealer-result__item`
+   - If you see `<div class="DealerCard_wrapper">`, use `div.DealerCard_wrapper`
+   - If you see `<div data-testid="dealer-card">`, use `div[data-testid="dealer-card"]`
+
+4. For nested structures, use child/descendant selectors:
+   - `div.dealer-card h3` for name within card
+   - `div.dealer-card .address-line` for address
+
+Return ONLY the JSON, no additional text. /no_think"""
+
+        if concise:
+            prompt += "\n\nConcise mode: Limit each selector list to <=2 items."
+            
+        return prompt
+
     def _extract_relevant_content(self, content: str, max_chars: int = 8000) -> str:
         """
         Extract relevant parts of content for analysis.
@@ -503,7 +692,7 @@ Your task is to analyze this page and identify EVERYTHING needed to scrape deale
   "interactions": {{
     "search_sequence": ["fill_input", "press_enter"],
     "pagination_type": "view_more",
-    "wait_after_search": 4,
+    "wait_after_search": 8,
     "wait_after_page_load": 3,
     "scroll_delay": 0.5,
     "view_more_delay": 2,
@@ -839,7 +1028,7 @@ Return ONLY the JSON, no additional text or markdown formatting. /no_think"""
             default_interactions = {
                 'search_sequence': ['fill_input', 'press_enter'],
                 'pagination_type': 'view_more',
-                'wait_after_search': 4,
+                'wait_after_search': 8,
                 'wait_after_page_load': 3,
                 'scroll_delay': 0.5,
                 'view_more_delay': 2,

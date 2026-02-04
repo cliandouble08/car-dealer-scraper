@@ -23,6 +23,7 @@ from .crawl4ai_discovery import (
     find_dealer_locator_sync,
     CRAWL4AI_AVAILABLE
 )
+from .cookie_consent import CookieConsentHandler
 
 __all__ = [
     'extract_phone',
@@ -42,4 +43,5 @@ __all__ = [
     'get_crawl4ai_discovery',
     'find_dealer_locator_sync',
     'CRAWL4AI_AVAILABLE',
+    'CookieConsentHandler',
 ]

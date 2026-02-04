@@ -43,6 +43,7 @@ from utils.extraction import (
 from utils.jina_reader import JinaReader
 from utils.llm_analyzer import LLMAnalyzer
 from utils.crawl4ai_discovery import Crawl4AIDiscovery, CRAWL4AI_AVAILABLE
+from utils.cookie_consent import CookieConsentHandler
 
 
 @dataclass
@@ -116,11 +117,17 @@ class GenericDealerScraper:
         self.selectors: Dict[str, Any] = {}
         self.data_fields: Dict[str, Any] = {}
         self.interactions: Dict[str, Any] = {}
+        
+        # Cookie consent handler (initialized after config is loaded)
+        self.cookie_handler: Optional[CookieConsentHandler] = None
 
         # Playwright browser/page (initialized in scrape)
         self.browser = None
         self.context = None
         self.page = None
+        
+        # Track if we've done HTML re-analysis for this session
+        self._html_analysis_done = False
 
     @staticmethod
     def _extract_domain(url: str) -> str:
@@ -411,6 +418,90 @@ class GenericDealerScraper:
         self.selectors = self.config.get('selectors', {})
         self.data_fields = self.config.get('data_fields', {})
         self.interactions = self.config.get('interactions', {})
+        
+        # Initialize cookie consent handler with config
+        self.cookie_handler = CookieConsentHandler(self.config)
+
+    async def _analyze_html_and_update_config(self) -> bool:
+        """
+        Capture HTML from current page and analyze it with LLM.
+        Updates the config with more accurate selectors.
+        
+        Returns:
+            True if analysis succeeded and config was updated
+        """
+        if self._html_analysis_done:
+            return False
+            
+        self._html_analysis_done = True
+        
+        if not self.page:
+            return False
+            
+        print("  Capturing HTML for structure analysis...")
+        
+        try:
+            # Get the full HTML of the page
+            html = await self.page.content()
+            
+            if not html or len(html) < 500:
+                print("  Warning: HTML content too short")
+                return False
+            
+            # Save HTML for debugging
+            self._save_html_artifact(html)
+            
+            # Analyze HTML structure with LLM
+            print("  Analyzing HTML structure with LLM...")
+            analysis_result = self.llm_analyzer.analyze_html_structure(html, self.url)
+            
+            if not analysis_result:
+                print("  Warning: HTML analysis returned no results")
+                return False
+            
+            confidence = analysis_result.get('confidence', 0.0)
+            print(f"  HTML analysis complete (confidence: {confidence:.2f})")
+            
+            # Generate and cache new config
+            config = generate_config_from_analysis(analysis_result, self.domain, self.url)
+            
+            # Mark this as HTML-analyzed config
+            config['analysis_method'] = 'html'
+            
+            # Save the new config
+            self.config_manager.cache_llm_config(config, self.domain)
+            
+            # Reload the config
+            self._load_cached_config()
+            
+            # Save analysis summary
+            self._save_analysis_summary(analysis_result, "")
+            
+            print(f"  Updated config from HTML analysis for {self.domain}")
+            print(f"  New dealer_cards selector: {self.selectors.get('dealer_cards', [])}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"  Error during HTML analysis: {e}")
+            return False
+
+    def _save_html_artifact(self, html: str):
+        """Save HTML content to disk for debugging."""
+        try:
+            from pathlib import Path
+            domain_dir = Path("data/analysis") / self.domain
+            domain_dir.mkdir(parents=True, exist_ok=True)
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            html_path = domain_dir / f"{timestamp}_page.html"
+            
+            with open(html_path, 'w', encoding='utf-8') as f:
+                f.write(html)
+            
+            print(f"  Saved HTML to {html_path}")
+        except Exception as e:
+            print(f"  Warning: Failed to save HTML: {e}")
 
     def _load_default_config(self):
         """Load default configuration."""
@@ -418,6 +509,9 @@ class GenericDealerScraper:
         self.selectors = self.config.get('selectors', {})
         self.data_fields = self.config.get('data_fields', {})
         self.interactions = self.config.get('interactions', {})
+        
+        # Initialize cookie consent handler with config
+        self.cookie_handler = CookieConsentHandler(self.config)
 
     async def scrape(self, zip_codes: List[str]) -> List[Dealer]:
         """
@@ -490,8 +584,8 @@ class GenericDealerScraper:
                         continue
 
                     # Delay between requests (longer to avoid rate limiting)
-                    delay = self.interactions.get('wait_after_search', 2)
-                    await asyncio.sleep(max(delay, 2))
+                    delay = self.interactions.get('wait_after_search', 5)
+                    await asyncio.sleep(max(delay, 3))
 
                     # Recreate context every 50 requests to avoid stale connections
                     if (i + 1) % 50 == 0:
@@ -540,7 +634,7 @@ class GenericDealerScraper:
 
         # Get timing config
         wait_after_page_load = self.interactions.get('wait_after_page_load', 3)
-        wait_after_search = self.interactions.get('wait_after_search', 4)
+        wait_after_search = self.interactions.get('wait_after_search', 8)
         click_delay = self.interactions.get('click_delay', 0.3)
 
         # Navigate to page with retry logic
@@ -616,48 +710,70 @@ class GenericDealerScraper:
         await self._handle_apply_button()
 
         # Wait for dealer cards
+        cards_found = False
         try:
             await self.page.wait_for_selector(
                 self._get_dealer_card_selector(),
                 timeout=10000
             )
+            cards_found = True
         except Exception:
-            print(f"  Warning: No dealer cards found initially")
+            print(f"  Warning: No dealer cards found initially with selector: {self._get_dealer_card_selector()}")
             if await self._handle_search_this_area_button():
                 try:
                     await self.page.wait_for_selector(
                         self._get_dealer_card_selector(),
                         timeout=10000
                     )
+                    cards_found = True
                 except Exception:
                     print(f"  Warning: No dealer cards found after map search")
+
+        # If no cards found, try HTML re-analysis to get better selectors
+        if not cards_found and not self._html_analysis_done:
+            print("  Attempting HTML-based structure analysis...")
+            
+            # Wait a bit more for dynamic content to load
+            await asyncio.sleep(3)
+            
+            if await self._analyze_html_and_update_config():
+                # Try again with new selectors
+                new_selector = self._get_dealer_card_selector()
+                print(f"  Retrying with new selector: {new_selector}")
+                try:
+                    await self.page.wait_for_selector(
+                        new_selector,
+                        timeout=10000
+                    )
+                    cards_found = True
+                except Exception:
+                    print(f"  Still no dealer cards found with new selector")
+                    # Try the fallback selector patterns as well
+                    cards_found = await self._try_fallback_selectors()
 
         # Expand results (View More / scroll)
         await self._expand_results()
 
         # Extract dealers
         dealers = await self._extract_dealers(zip_code)
+        
+        # If still no dealers, try more aggressive selector fallbacks
+        if not dealers and not cards_found:
+            print("  Trying fallback extraction from page content...")
+            dealers = await self._extract_dealers_from_html(zip_code)
 
         return dealers
 
     async def _handle_cookie_popup(self):
-        """Handle common cookie consent popups."""
-        cookie_selectors = [
-            '#onetrust-accept-btn-handler',
-            '[id*="cookie"] button',
-            '[class*="cookie"] button',
-            'button:has-text("Accept")',
-            'button:has-text("Accept All")',
-        ]
-        for selector in cookie_selectors:
+        """Handle cookie consent popups using the CookieConsentHandler."""
+        if self.cookie_handler:
             try:
-                btn = await self.page.query_selector(selector)
-                if btn and await btn.is_visible():
-                    await btn.click()
-                    await asyncio.sleep(0.5)
-                    return
-            except Exception:
-                continue
+                dismissed = await self.cookie_handler.dismiss_cookie_banner(self.page)
+                if dismissed and self.debug:
+                    print("  Cookie consent banner dismissed")
+            except Exception as e:
+                if self.debug:
+                    print(f"  Warning: Error handling cookie popup: {e}")
 
     async def _handle_search_this_area_button(self) -> bool:
         """Click a map-based 'Search This Area' button if present."""
@@ -671,7 +787,7 @@ class GenericDealerScraper:
             button = await self._find_visible_element(button_selectors)
             if button:
                 await button.click()
-                await asyncio.sleep(self.interactions.get('wait_after_search', 2))
+                await asyncio.sleep(self.interactions.get('wait_after_search', 5))
                 return True
         except Exception:
             return False
@@ -720,7 +836,7 @@ class GenericDealerScraper:
             if modal_button:
                 await modal_button.click()
 
-            await asyncio.sleep(self.interactions.get('wait_after_search', 2))
+            await asyncio.sleep(self.interactions.get('wait_after_search', 5))
             return True
         except Exception:
             return False
@@ -1434,6 +1550,155 @@ class GenericDealerScraper:
             except Exception:
                 continue
 
+        return dealers
+
+    async def _try_fallback_selectors(self) -> bool:
+        """
+        Try common fallback selectors to find dealer cards.
+        Updates self.selectors if a working selector is found.
+        
+        Returns:
+            True if cards were found with a fallback selector
+        """
+        fallback_selectors = [
+            # Common class patterns
+            "[class*='dealer-card']",
+            "[class*='dealerCard']",
+            "[class*='DealerCard']",
+            "[class*='dealer-result']",
+            "[class*='dealer-item']",
+            "[class*='location-card']",
+            "[class*='locationCard']",
+            "[class*='LocationCard']",
+            "[class*='store-card']",
+            "[class*='retailer']",
+            # Data attribute patterns
+            "[data-testid*='dealer']",
+            "[data-testid*='location']",
+            "[data-dealer-id]",
+            "[data-dealer]",
+            # List patterns
+            "ul[class*='dealer'] > li",
+            "ul[class*='location'] > li",
+            "ul[class*='result'] > li",
+            "ul[class*='list'] > li[class*='item']",
+            # Result/card patterns
+            "li[class*='result']",
+            "div[class*='result-item']",
+            "[role='listitem']",
+            # Aston Martin specific (common luxury car patterns)
+            "[class*='showroom']",
+            "[class*='retailer']",
+            "li[class*='Card']",
+            "div[class*='Card']",
+        ]
+        
+        for selector in fallback_selectors:
+            try:
+                elements = await self.page.query_selector_all(selector)
+                if elements and len(elements) > 0:
+                    # Verify at least one has content
+                    for elem in elements[:3]:
+                        try:
+                            text = await elem.inner_text()
+                            if len(text.strip()) > 30:
+                                print(f"  Found dealer cards with fallback selector: {selector}")
+                                self.selectors['dealer_cards'] = [selector]
+                                return True
+                        except Exception:
+                            continue
+            except Exception:
+                continue
+        
+        return False
+
+    async def _extract_dealers_from_html(self, zip_code: str) -> List[Dealer]:
+        """
+        Fallback extraction that tries multiple common selector patterns.
+        
+        This is used when the LLM-generated selectors fail.
+        """
+        dealers = []
+        seen_keys = set()
+        
+        # Common selector patterns for dealer cards across different sites
+        fallback_selectors = [
+            # Common class patterns
+            "[class*='dealer-card']",
+            "[class*='dealerCard']",
+            "[class*='DealerCard']",
+            "[class*='dealer-result']",
+            "[class*='dealer-item']",
+            "[class*='location-card']",
+            "[class*='locationCard']",
+            "[class*='store-card']",
+            "[class*='storeCard']",
+            "[class*='retailer-card']",
+            "[class*='retailerCard']",
+            # Data attribute patterns
+            "[data-testid*='dealer']",
+            "[data-testid*='location']",
+            "[data-testid*='store']",
+            "[data-dealer]",
+            "[data-location]",
+            # List item patterns
+            "ul[class*='dealer'] > li",
+            "ul[class*='location'] > li",
+            "ul[class*='result'] > li",
+            # Specific to car manufacturer sites
+            "[class*='showroom']",
+            "[class*='Showroom']",
+            "li[class*='result']",
+            "div[class*='result-item']",
+            # Role-based
+            "[role='listitem']",
+            "li[role='article']",
+        ]
+        
+        cards = []
+        successful_selector = None
+        
+        for selector in fallback_selectors:
+            try:
+                found_cards = await self.page.query_selector_all(selector)
+                if found_cards and len(found_cards) > 0:
+                    # Verify these look like dealer cards (have some text content)
+                    sample_text = ""
+                    try:
+                        sample_text = await found_cards[0].inner_text()
+                    except Exception:
+                        pass
+                    
+                    # Skip if empty or too short
+                    if len(sample_text) < 20:
+                        continue
+                    
+                    cards = found_cards
+                    successful_selector = selector
+                    print(f"  Found {len(cards)} potential dealer cards with selector: {selector}")
+                    break
+            except Exception:
+                continue
+        
+        if not cards:
+            print("  No dealer cards found with fallback selectors")
+            return dealers
+        
+        # Update the config with the working selector for future use
+        if successful_selector:
+            self.selectors['dealer_cards'] = [successful_selector]
+        
+        for card in cards:
+            try:
+                dealer = await self._extract_dealer_from_card(card, zip_code)
+                if dealer:
+                    dedupe_key = f"{dealer.name.lower()}|{dealer.address.lower()}"
+                    if dedupe_key not in seen_keys:
+                        seen_keys.add(dedupe_key)
+                        dealers.append(dealer)
+            except Exception:
+                continue
+        
         return dealers
 
     async def _query_selector_all_in_frames(self, selectors):
