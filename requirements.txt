@@ -15,3 +15,6 @@ duckduckgo-search>=6.0.0
 
 # Configuration file support
 pyyaml>=6.0
+
+# Web crawling and URL discovery
+crawl4ai>=0.4.0

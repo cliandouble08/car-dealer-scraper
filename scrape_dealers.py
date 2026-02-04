@@ -42,6 +42,7 @@ from utils.extraction import (
 )
 from utils.jina_reader import JinaReader
 from utils.llm_analyzer import LLMAnalyzer
+from utils.crawl4ai_discovery import Crawl4AIDiscovery, CRAWL4AI_AVAILABLE
 
 
 @dataclass
@@ -104,6 +105,10 @@ class GenericDealerScraper:
         # Initialize AI components
         self.jina_reader = JinaReader(enabled=enable_ai)
         self.llm_analyzer = LLMAnalyzer(enabled=enable_ai)
+        self.crawl4ai_discovery = Crawl4AIDiscovery(
+            llm_analyzer=self.llm_analyzer,
+            headless=headless
+        ) if CRAWL4AI_AVAILABLE else None
 
         # Configuration (loaded after analysis)
         self.config_manager = get_config_manager()
@@ -144,6 +149,60 @@ class GenericDealerScraper:
             return ""
         normalized = path.strip().rstrip('/')
         return normalized.lower()
+
+    async def _discover_locator_with_crawl4ai(self) -> Optional[Dict[str, Any]]:
+        """
+        Use Crawl4AI to extract all URLs from the website and ask the LLM
+        to select the most likely dealer locator page.
+
+        Returns:
+            Dict with 'is_locator', 'locator_url', 'confidence', 'locator_candidates'
+            or None if discovery failed
+        """
+        # Check if Crawl4AI is available
+        if not self.crawl4ai_discovery or not self.crawl4ai_discovery.enabled:
+            print("  Crawl4AI not available, falling back to Jina Reader + LLM method...")
+            # Fallback to the original Jina Reader + LLM method
+            artifacts = self.jina_reader.save_analysis_artifacts(self.url)
+            if not artifacts or not artifacts.get('content'):
+                return None
+            return self.llm_analyzer.find_dealer_locator_url(
+                artifacts['content'],
+                self.url
+            )
+
+        try:
+            # Use Crawl4AI for URL discovery
+            discovery_result = await self.crawl4ai_discovery.find_dealer_locator(self.url)
+
+            if discovery_result:
+                print(f"  Crawl4AI discovery complete (confidence: {discovery_result.get('confidence', 0):.2f})")
+                if discovery_result.get('is_locator'):
+                    print("  > Current page identified as dealer locator")
+                elif discovery_result.get('locator_url'):
+                    print(f"  > Best locator candidate: {discovery_result['locator_url']}")
+                return discovery_result
+
+            # If Crawl4AI didn't find anything, fall back to Jina Reader + LLM
+            print("  Crawl4AI found no candidates, falling back to Jina Reader + LLM...")
+            artifacts = self.jina_reader.save_analysis_artifacts(self.url)
+            if not artifacts or not artifacts.get('content'):
+                return None
+            return self.llm_analyzer.find_dealer_locator_url(
+                artifacts['content'],
+                self.url
+            )
+
+        except Exception as e:
+            print(f"  Warning: Crawl4AI discovery failed ({e}), falling back to Jina Reader + LLM...")
+            # Fallback to original method
+            artifacts = self.jina_reader.save_analysis_artifacts(self.url)
+            if not artifacts or not artifacts.get('content'):
+                return None
+            return self.llm_analyzer.find_dealer_locator_url(
+                artifacts['content'],
+                self.url
+            )
 
     async def analyze_site(self) -> bool:
         """
@@ -189,12 +248,9 @@ class GenericDealerScraper:
             self._load_default_config()
             return False
 
-        # Step 2: Locator Discovery (Is this the right page?)
+        # Step 2: Locator Discovery using Crawl4AI (Is this the right page?)
         print("  Checking if this is the dealer locator page...")
-        discovery_result = self.llm_analyzer.find_dealer_locator_url(
-            artifacts['content'],
-            self.url
-        )
+        discovery_result = await self._discover_locator_with_crawl4ai()
 
         if discovery_result and not discovery_result.get('is_locator', False):
             locator_path = discovery_result.get('locator_url')

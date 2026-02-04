@@ -5,9 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 This is a generalized web scraping system for extracting car dealership information from any dealer locator website. The scraper uses:
-1. **Jina Reader**: Converts web pages to LLM-friendly text and captures screenshots
-2. **Local LLM (Ollama/Llama)**: Analyzes page structure to identify selectors and interaction patterns
-3. **Playwright**: Browser automation for scraping with the LLM-identified patterns
+1. **Crawl4AI**: Discovers and extracts all URLs from a website to find the dealer locator page
+2. **Jina Reader**: Converts web pages to LLM-friendly text and captures screenshots
+3. **Local LLM (Ollama/Llama)**: Analyzes page structure to identify selectors and interaction patterns
+4. **Playwright**: Browser automation for scraping with the LLM-identified patterns
 
 ## Core Architecture
 
@@ -25,6 +26,7 @@ This is a generalized web scraping system for extracting car dealership informat
 - `ConfigManager.get_config()`: Merges configs using deep merge strategy
 
 **utils/** - Utility modules
+- `crawl4ai_discovery.py`: URL discovery using Crawl4AI to find dealer locator pages
 - `jina_reader.py`: Fetches LLM-friendly content and screenshots via Jina Reader API
 - `llm_analyzer.py`: LLM-based page structure analysis using Ollama
 - `dynamic_config.py`: Config generation from LLM analysis results
@@ -48,17 +50,19 @@ Each config contains:
 ```
 1. Load websites from websites.txt
 2. For each website:
-   a. Fetch page with Jina Reader
-   b. Save screenshot and text to data/analysis/{domain}/
-   c. Analyze with LLM to identify selectors
-   d. Cache generated config
-   e. For each zip code:
+   a. Fetch page with Jina Reader for initial content
+   b. Use Crawl4AI to discover all URLs on the page
+   c. Ask LLM to identify which URL is the dealer locator page
+   d. If not already on locator page, redirect to the discovered URL
+   e. Analyze page structure with LLM to identify selectors
+   f. Cache generated config
+   g. For each zip code:
       - Navigate to page with Playwright
       - Fill search input with zip code
       - Click search/press Enter
       - Expand results (View More / scroll)
       - Extract dealer info from cards
-   f. Save results to output/
+   h. Save results to output/
 3. Move to next website
 ```
 
@@ -68,6 +72,7 @@ Each config contains:
 ```bash
 pip install -r requirements.txt
 playwright install chromium
+crawl4ai-setup  # Set up Crawl4AI browser
 ```
 
 ### Scraping

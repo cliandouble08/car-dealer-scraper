@@ -17,6 +17,12 @@ from .dynamic_config import (
     load_dynamic_config,
     validate_selectors
 )
+from .crawl4ai_discovery import (
+    Crawl4AIDiscovery,
+    get_crawl4ai_discovery,
+    find_dealer_locator_sync,
+    CRAWL4AI_AVAILABLE
+)
 
 __all__ = [
     'extract_phone',
@@ -32,4 +38,8 @@ __all__ = [
     'save_dynamic_config',
     'load_dynamic_config',
     'validate_selectors',
+    'Crawl4AIDiscovery',
+    'get_crawl4ai_discovery',
+    'find_dealer_locator_sync',
+    'CRAWL4AI_AVAILABLE',
 ]
