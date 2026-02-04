@@ -527,6 +527,29 @@ Your task is to analyze this page and identify EVERYTHING needed to scrape deale
     "phone_patterns": ["\\\\(?\\\\d{{3}}\\\\)?[-.\\\\s]?\\\\d{{3}}[-.\\\\s]?\\\\d{{4}}"],
     "address_patterns": [".+?,\\\\s*[A-Za-z\\\\s]+,\\\\s*[A-Z]{{2}}\\\\s+\\\\d{{5}}"]
   }},
+  "crawl4ai_interactions": {{
+    "search_action": {{
+      "type": "js_code",
+      "code_template": "const input = document.querySelector('{{SEARCH_SELECTOR}}'); if (input) {{ input.value = '{{ZIP_CODE}}'; input.dispatchEvent(new Event('input', {{ bubbles: true }})); }}",
+      "wait_after": 2,
+      "wait_for": "css:.dealer-card"
+    }},
+    "search_submit": {{
+      "type": "js_code",
+      "code_template": "const btn = document.querySelector('{{BUTTON_SELECTOR}}'); if (btn) btn.click();",
+      "alternative": "press_enter"
+    }},
+    "load_more_action": {{
+      "type": "js_code",
+      "code_template": "const btn = document.querySelector('{{LOAD_MORE_SELECTOR}}'); if (btn && btn.offsetParent !== null) {{ btn.click(); return true; }} return false;",
+      "max_iterations": 30
+    }},
+    "virtual_scroll": {{
+      "enabled": false,
+      "container_selector": null,
+      "scroll_count": 30
+    }}
+  }},
   "confidence": 0.85,
   "notes": "Additional observations about the page structure"
 }}
@@ -548,6 +571,12 @@ IMPORTANT Guidelines:
 10. Use valid CSS selectors. The "type" field indicates if we should get text content or an attribute value.
 11. **confidence**: 0.0-1.0 based on how certain you are about the selectors
 12. If something doesn't exist, use null or empty array []
+13. **crawl4ai_interactions**: JavaScript code templates for Crawl4AI browser automation
+    - Use placeholders: {{SEARCH_SELECTOR}}, {{ZIP_CODE}}, {{BUTTON_SELECTOR}}, {{LOAD_MORE_SELECTOR}}
+    - search_action: Fill the search input with zip code
+    - search_submit: Click search button or press Enter
+    - load_more_action: Click "Load More" / "View More" button
+    - virtual_scroll: For infinite scroll pages (Twitter-style)
 
 Return ONLY the JSON, no additional text or markdown formatting. /no_think"""
 
@@ -556,24 +585,26 @@ Return ONLY the JSON, no additional text or markdown formatting. /no_think"""
 
         return prompt
 
-    def _call_llm(self, prompt: str) -> Optional[str]:
+    def _call_llm(self, prompt: str, max_tokens: Optional[int] = None) -> Optional[str]:
         """
         Call local LLM API (Ollama).
 
         Args:
             prompt: Prompt to send to LLM
+            max_tokens: Optional max tokens override (defaults to self.max_tokens)
 
         Returns:
             LLM response text or None if failed
         """
         try:
+            num_tokens = max_tokens if max_tokens is not None else self.max_tokens
             payload = {
                 "model": self.model,
                 "prompt": prompt,
                 "stream": False,
                 "options": {
                     "temperature": 0.1,  # Low temperature for consistent output
-                    "num_predict": self.max_tokens
+                    "num_predict": num_tokens
                 }
             }
 
@@ -759,6 +790,7 @@ Return ONLY the JSON, no additional text or markdown formatting. /no_think"""
                 'interactions': analysis.get('interactions', {}),
                 'input_fields': analysis.get('input_fields', {}),
                 'extraction': analysis.get('extraction', {}),
+                'crawl4ai_interactions': analysis.get('crawl4ai_interactions', {}),
                 'confidence': analysis.get('confidence', 0.5),
                 'notes': analysis.get('notes', ''),
                 # Pass through locator fields if present
@@ -840,6 +872,19 @@ Return ONLY the JSON, no additional text or markdown formatting. /no_think"""
             print(f"Error parsing LLM JSON response: {e}")
             print(f"Response was: {response[:500]}")
             return None
+
+    def _parse_json_response(self, response: str, max_tokens: int = None) -> Optional[Dict[str, Any]]:
+        """
+        Alias for _parse_llm_response for compatibility with post-validator.
+
+        Args:
+            response: Raw LLM response
+            max_tokens: Optional token limit (ignored, for compatibility)
+
+        Returns:
+            Parsed JSON dictionary or None
+        """
+        return self._parse_llm_response(response)
 
 
 # Global instance

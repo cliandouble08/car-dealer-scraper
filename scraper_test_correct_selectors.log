@@ -1,0 +1,32 @@
+AI features enabled - using Jina Reader and LLM analysis
+Loaded 1 zip codes
+Loaded 1 websites to scrape
+
+============================================================
+[1/1] Scraping ford.com...
+URL: https://www.ford.com/
+============================================================
+  Using cached LLM config for ford.com
+  > Redirecting to known locator URL from cache: https://www.ford.com/dealerships/
+[1/1] Scraping ford.com for 10001...
+[FETCH]... ↓ https://www.ford.com/dealerships/?zipcode=10001                    
+| ✓ | ⏱: 16.89s 
+[SCRAPE].. ◆ https://www.ford.com/dealerships/?zipcode=10001                    
+| ✓ | ⏱: 0.10s 
+[COMPLETE] ● https://www.ford.com/dealerships/?zipcode=10001                    
+| ✓ | ⏱: 16.99s 
+  Validating search results for ford.com...
+Post-search validation: No dealers found with expected selectors, analyzing HTML...
+Heuristic found 35 potential dealers with selector: div[class*="item"]
+Found 35 dealers with alternative selectors
+  Refining selectors (confidence: 0.90)...
+Refining dealer card selectors: ['div[class*="item"]']
+  Refined selectors: ['div[class*="item"]']
+  Processing 164 dealer cards...
+  Found 0 dealers
+
+No dealers found for ford.com
+
+============================================================
+COMPLETE: Found 0 dealers across all websites
+============================================================

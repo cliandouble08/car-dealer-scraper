@@ -40,7 +40,8 @@ def generate_config_from_analysis(
         'data_fields': {},
         'interactions': {},
         'input_fields': {},
-        'extraction': {}
+        'extraction': {},
+        'crawl4ai_interactions': {}
     }
 
     # Process selectors
@@ -114,6 +115,41 @@ def generate_config_from_analysis(
             k: v for k, v in extraction.items()
             if isinstance(v, list) and v
         }
+
+    # Process Crawl4AI interactions (JavaScript templates and browser automation config)
+    crawl4ai_interactions = analysis_result.get('crawl4ai_interactions', {})
+    if isinstance(crawl4ai_interactions, dict):
+        # Validate and process each interaction type
+        for interaction_type, interaction_config in crawl4ai_interactions.items():
+            if isinstance(interaction_config, dict):
+                validated_interaction = {}
+
+                # Copy all fields that are present
+                if 'type' in interaction_config:
+                    validated_interaction['type'] = interaction_config['type']
+                if 'code_template' in interaction_config:
+                    validated_interaction['code_template'] = interaction_config['code_template']
+                if 'wait_after' in interaction_config:
+                    validated_interaction['wait_after'] = interaction_config['wait_after']
+                if 'wait_for' in interaction_config:
+                    validated_interaction['wait_for'] = interaction_config['wait_for']
+                if 'alternative' in interaction_config:
+                    validated_interaction['alternative'] = interaction_config['alternative']
+                if 'max_iterations' in interaction_config:
+                    validated_interaction['max_iterations'] = interaction_config['max_iterations']
+                if 'enabled' in interaction_config:
+                    validated_interaction['enabled'] = bool(interaction_config['enabled'])
+                if 'container_selector' in interaction_config:
+                    validated_interaction['container_selector'] = interaction_config['container_selector']
+                if 'scroll_count' in interaction_config:
+                    validated_interaction['scroll_count'] = interaction_config['scroll_count']
+                if 'scroll_by' in interaction_config:
+                    validated_interaction['scroll_by'] = interaction_config['scroll_by']
+                if 'wait_after_scroll' in interaction_config:
+                    validated_interaction['wait_after_scroll'] = interaction_config['wait_after_scroll']
+
+                if validated_interaction:
+                    config['crawl4ai_interactions'][interaction_type] = validated_interaction
 
     return config
 

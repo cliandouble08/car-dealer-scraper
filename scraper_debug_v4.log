@@ -1,0 +1,88 @@
+AI features enabled - using Jina Reader and LLM analysis
+Loaded 1 zip codes
+Loaded 1 websites to scrape
+
+============================================================
+[1/1] Scraping ford.com...
+URL: https://www.ford.com/
+============================================================
+  Using cached LLM config for ford.com
+  > Redirecting to known locator URL from cache: https://www.ford.com/dealerships/
+[1/1] Scraping ford.com for 10001...
+[ERROR]... × https://www.ford.com/dealerships/                  | Error: 
+Unexpected error in _crawl_web at line 718 in _crawl_web 
+(../../../../../opt/anaconda3/lib/python3.13/site-packages/crawl4ai/async_crawle
+r_strategy.py):
+Error: Failed on navigating ACS-GOTO:
+Page.goto: Timeout 60000ms exceeded.
+Call log:
+  - navigating to "https://www.ford.com/dealerships/", waiting until 
+"networkidle"
+
+
+Code context:
+ 713                                   tag="GOTO",
+ 714                                   params={"url": url},
+ 715                               )
+ 716                               response = None
+ 717                           else:
+ 718 →                             raise RuntimeError(f"Failed on navigating 
+ACS-GOTO:\n{str(e)}")
+ 719   
+ 720                       # 
+──────────────────────────────────────────────────────────────
+ 721                       # Walk the redirect chain.  Playwright returns only 
+the last
+ 722                       # hop, so we trace the `request.redirected_from` 
+links until the
+ 723                       # first response that differs from the final one and 
+surface its 
+[SCRAPE].. ◆ Failed to remove overlay elements: Page.evaluate: Execution context
+was destroyed, most likely because of a navigation. 
+[FETCH]... ↓ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 1.87s 
+[SCRAPE].. ◆ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 0.01s 
+[COMPLETE] ● https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 1.88s 
+[SCRAPE].. ◆ Failed to remove overlay elements: Page.evaluate: Execution context
+was destroyed, most likely because of a navigation. 
+[FETCH]... ↓ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 3.59s 
+[SCRAPE].. ◆ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 0.00s 
+[COMPLETE] ● https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 3.60s 
+  Warning: No dealer cards found after search (selector: li[class*=\'dealer\'])
+  DEBUG: Saved HTML to /Users/cameronlian/Desktop/development/dealership-scraping/debug_html/ford.com_10001_debug.html
+[SCRAPE].. ◆ Failed to remove overlay elements: Page.evaluate: Execution context
+was destroyed, most likely because of a navigation. 
+[FETCH]... ↓ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 2.54s 
+[SCRAPE].. ◆ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 0.00s 
+[COMPLETE] ● https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 2.54s 
+[SCRAPE].. ◆ Failed to remove overlay elements: Page.evaluate: Execution context
+was destroyed, most likely because of a navigation. 
+[FETCH]... ↓ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 2.54s 
+[SCRAPE].. ◆ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 0.00s 
+[COMPLETE] ● https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 2.54s 
+  Validating search results for ford.com...
+Post-search validation: No dealers found with expected selectors, analyzing HTML...
+No dealers found even with heuristic analysis
+  Refining selectors (confidence: 0.10)...
+  Using LLM for selector refinement...
+LLM could not find dealer cards
+  Refined selectors: ["li[class*='dealer']", "div[class*='dealer']"]
+  No dealer cards found in HTML
+  Found 0 dealers
+
+No dealers found for ford.com
+
+============================================================
+COMPLETE: Found 0 dealers across all websites
+============================================================

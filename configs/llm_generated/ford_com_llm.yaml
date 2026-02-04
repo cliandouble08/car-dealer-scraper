@@ -1,0 +1,93 @@
+site: ford.com
+base_url: https://www.ford.com/dealerships/
+generated_by: llm_analyzer
+generated_date: '2026-02-03T20:32:44.894054'
+confidence: 0.85
+notes: Additional observations about the page structure
+selectors:
+  search_input:
+  - input[placeholder*='zip']
+  - input[name*='zip']
+  search_button:
+  - button[type='submit']
+  view_more_button:
+  - button[class*='load-more']
+  dealer_cards:
+  - li[class*='dealer']
+  - div[class*='dealer']
+data_fields:
+  name:
+    selector: .dealer-card h2
+    type: text
+    fallback_patterns:
+    - h2
+    - h3
+    - '[class*=''name'']'
+  address:
+    selector: .dealer-card .location
+    type: text
+    fallback_patterns:
+    - '[class*=''address'']'
+    - '[class*=''location'']'
+  phone:
+    selector: .dealer-card a.phone
+    type: href
+    attribute: href
+    fallback_patterns:
+    - a[href^='tel:']
+    - '[class*=''phone'']'
+  website:
+    selector: .dealer-card .website
+    type: href
+    attribute: href
+    fallback_patterns:
+    - a[href^='http']
+    - '[class*=''website'']'
+interactions:
+  search_sequence:
+  - fill_input
+  - press_enter
+  pagination_type: view_more
+  wait_after_search: 4
+  wait_after_page_load: 3
+  scroll_delay: 0.5
+  view_more_delay: 2
+  click_delay: 0.3
+input_fields:
+  zip_code:
+    selector: input[placeholder='zip']
+    type: text
+    required: true
+  radius:
+    type: select
+    required: false
+    default_value: '50'
+extraction:
+  name_patterns:
+  - h2
+  phone_patterns:
+  - \(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}
+  address_patterns:
+  - .+?,\s*[A-Za-z\s]+,\s*[A-Z]{2}\s+\d{5}
+crawl4ai_interactions:
+  search_action:
+    type: js_code
+    code_template: 'const input = document.querySelector(''{SEARCH_SELECTOR}''); if
+      (input) { input.value = ''{ZIP_CODE}''; input.dispatchEvent(new Event(''input'',
+      { bubbles: true })); }'
+    wait_after: 2
+    wait_for: css:.dealer-card
+  search_submit:
+    type: js_code
+    code_template: const btn = document.querySelector('{BUTTON_SELECTOR}'); if (btn)
+      btn.click();
+    alternative: press_enter
+  load_more_action:
+    type: js_code
+    code_template: const btn = document.querySelector('{LOAD_MORE_SELECTOR}'); if
+      (btn && btn.offsetParent !== null) { btn.click(); return true; } return false;
+    max_iterations: 30
+  virtual_scroll:
+    enabled: false
+    container_selector: null
+    scroll_count: 30

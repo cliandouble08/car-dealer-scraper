@@ -4,7 +4,7 @@ Generalized Multi-Website Dealer Scraper
 
 Scrapes car dealership information from arbitrary dealer locator websites.
 Uses Jina Reader + local LLM (Llama) to analyze site structure,
-then Playwright for browser automation.
+then Crawl4AI for browser automation.
 
 Usage:
     python scrape_dealers.py --websites websites.txt --zip-codes "02134,10001"
@@ -31,6 +31,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse, urljoin
 
+from bs4 import BeautifulSoup
+
 from config_manager import get_config_manager
 from utils.dynamic_config import generate_config_from_analysis
 from utils.extraction import (
@@ -42,6 +44,9 @@ from utils.extraction import (
 )
 from utils.jina_reader import JinaReader
 from utils.llm_analyzer import LLMAnalyzer
+from utils.crawl4ai_scraper import Crawl4AIScraper
+from utils.post_search_validator import PostSearchValidator
+from utils.firecrawl_discovery import DealerLocatorDiscovery
 
 
 @dataclass
@@ -105,6 +110,11 @@ class GenericDealerScraper:
         self.jina_reader = JinaReader(enabled=enable_ai)
         self.llm_analyzer = LLMAnalyzer(enabled=enable_ai)
 
+        # Initialize Crawl4AI components
+        self.crawl4ai = Crawl4AIScraper(headless=headless, verbose=self.debug)
+        self.post_validator = PostSearchValidator()
+        self.discovery = DealerLocatorDiscovery()
+
         # Configuration (loaded after analysis)
         self.config_manager = get_config_manager()
         self.config: Dict[str, Any] = {}
@@ -112,10 +122,8 @@ class GenericDealerScraper:
         self.data_fields: Dict[str, Any] = {}
         self.interactions: Dict[str, Any] = {}
 
-        # Playwright browser/page (initialized in scrape)
-        self.browser = None
-        self.context = None
-        self.page = None
+        # Post-search validation flag (validates once per domain)
+        self.validated = False
 
     @staticmethod
     def _extract_domain(url: str) -> str:
@@ -147,7 +155,13 @@ class GenericDealerScraper:
 
     async def analyze_site(self) -> bool:
         """
-        Analyze the website structure using Jina Reader and LLM.
+        Analyze the website structure using Crawl4AI discovery + LLM.
+
+        Workflow:
+        1. Check discovery cache first
+        2. Use Crawl4AI to discover dealer locator URL
+        3. Fetch and analyze page structure with LLM
+        4. Generate and cache configuration
 
         Returns:
             True if analysis succeeded and config was generated
@@ -158,7 +172,6 @@ class GenericDealerScraper:
             return False
 
         # Step 0: Check if config already exists for initial domain
-        # Note: We check again after discovery if the domain changes
         if self.config_manager.has_llm_config(self.domain):
             print(f"  Using cached LLM config for {self.domain}")
             self._load_cached_config()
@@ -166,92 +179,62 @@ class GenericDealerScraper:
             # Check if we should redirect based on cached config
             cached_base_url = self.config.get('base_url')
             if cached_base_url:
-                # If cached URL is a sub-path of current URL (e.g. /dealers vs /), redirect
-                # Or if they are different and current is root-ish
                 cached_path = urlparse(cached_base_url).path.rstrip('/')
                 current_path = urlparse(self.url).path.rstrip('/')
-                
-                # If cached path is longer/more specific than current path, use it
+
+                # If cached path is longer/more specific, use it
                 if len(cached_path) > len(current_path) and self.domain == self._extract_domain(cached_base_url):
                     print(f"  > Redirecting to known locator URL from cache: {cached_base_url}")
                     self.url = cached_base_url
                     return True
 
-            # If URLs match or no better URL in cache, we assume cache is good for current URL
             return True
 
-        print(f"  Analyzing {self.url} with LLM...")
+        print(f"  Discovering dealer locator URL for {self.url}...")
 
-        # Step 1: Fetch content for initial analysis/discovery
+        # Step 1: Crawl4AI-based URL discovery
+        discovery_result = await self.discovery.discover_locator_url(self.url)
+
+        if discovery_result and discovery_result.get('locator_url'):
+            new_url = discovery_result['locator_url']
+            confidence = discovery_result.get('confidence', 0.0)
+            method = discovery_result.get('method', 'unknown')
+
+            print(f"  > Discovery: Found locator at {new_url} (confidence: {confidence:.2f}, method: {method})")
+
+            # Update scraper state
+            self.url = new_url
+            self.domain = self._extract_domain(new_url)
+
+            # Check if config exists for discovered URL
+            if self.config_manager.has_llm_config(self.domain):
+                print(f"  Using cached LLM config for {self.domain}")
+                self._load_cached_config()
+                return True
+        else:
+            print("  Discovery did not find a different URL, analyzing current page...")
+
+        # Step 2: Fetch content for LLM analysis
+        print(f"  Analyzing {self.url} with LLM...")
         artifacts = self.jina_reader.save_analysis_artifacts(self.url)
         if not artifacts or not artifacts.get('content'):
             print(f"  Warning: Could not fetch content, using default selectors")
             self._load_default_config()
             return False
 
-        # Step 2: Locator Discovery (Is this the right page?)
-        print("  Checking if this is the dealer locator page...")
+        # Check for 404
+        if self._is_jina_404_content(artifacts.get('content', '')):
+            print(f"  Warning: Page returned 404 content, using default selectors")
+            self._load_default_config()
+            return False
+
+        # Step 3: Analyze page structure with LLM (now includes Crawl4AI templates)
         discovery_result = self.llm_analyzer.find_dealer_locator_url(
             artifacts['content'],
             self.url
         )
 
-        if discovery_result and not discovery_result.get('is_locator', False):
-            locator_path = discovery_result.get('locator_url')
-            locator_candidates = discovery_result.get('locator_candidates', [])
-            candidate_paths = []
-            seen_candidates = set()
-            for candidate in [locator_path] + locator_candidates:
-                normalized = self._normalize_locator_path(candidate)
-                if not normalized or normalized in seen_candidates:
-                    continue
-                seen_candidates.add(normalized)
-                candidate_paths.append(candidate)
-
-            for locator_path in candidate_paths:
-                # Construct full URL
-                new_url = urljoin(self.url, locator_path)
-                print(f"  > Discovery: Redirecting to actual locator: {new_url}")
-
-                # Update scraper state
-                self.url = new_url
-                self.domain = self._extract_domain(new_url)
-
-                # Check cache for the new domain
-                if self.config_manager.has_llm_config(self.domain):
-                    print(f"  Using cached LLM config for {self.domain}")
-                    self._load_cached_config()
-                    return True
-
-                # Re-fetch content for the actual locator page
-                print(f"  Fetching content from locator: {self.url}...")
-                artifacts = self.jina_reader.save_analysis_artifacts(self.url)
-                if not artifacts or not artifacts.get('content'):
-                    print(
-                        "  Warning: Could not fetch locator content, "
-                        "trying next candidate if available"
-                    )
-                    continue
-                if self._is_jina_404_content(artifacts.get('content', '')):
-                    print(
-                        "  Warning: Locator returned 404 content, "
-                        "trying next candidate if available"
-                    )
-                    artifacts = None
-                    continue
-                break
-
-            if not artifacts or not artifacts.get('content'):
-                print(
-                    "  Warning: Could not fetch locator content, "
-                    "using default selectors"
-                )
-                self._load_default_config()
-                return False
-        else:
-             print("  Confirmed: This appears to be the dealer locator page.")
-
-        # Step 3: Analyze page structure with LLM
+        # Step 4: Analyze page structure with LLM (generates Crawl4AI config)
         analysis_result = self.llm_analyzer.analyze_page_structure(
             artifacts['content'],
             self.url
@@ -264,14 +247,14 @@ class GenericDealerScraper:
         confidence = analysis_result.get('confidence', 0.0)
         print(f"  LLM analysis complete (confidence: {confidence:.2f})")
 
-        # Step 4: Generate and cache config
+        # Step 5: Generate and cache config (includes crawl4ai_interactions)
         config = generate_config_from_analysis(analysis_result, self.domain, self.url)
         self.config_manager.cache_llm_config(config, self.domain)
 
-        # Step 5: Save analysis summary for troubleshooting
+        # Step 6: Save analysis summary for troubleshooting
         self._save_analysis_summary(analysis_result, artifacts.get('content_path', ''))
 
-        # Step 6: Load the config
+        # Step 7: Load the generated config
         self._load_cached_config()
         print(f"  LLM-generated config saved for {self.domain}")
 
@@ -365,7 +348,7 @@ class GenericDealerScraper:
 
     async def scrape(self, zip_codes: List[str]) -> List[Dealer]:
         """
-        Scrape dealers for all provided zip codes.
+        Scrape dealers for all provided zip codes using Crawl4AI.
 
         Args:
             zip_codes: List of zip codes to search
@@ -373,106 +356,52 @@ class GenericDealerScraper:
         Returns:
             List of Dealer objects
         """
-        # Import playwright here to avoid import errors if not installed
-        try:
-            from playwright.async_api import async_playwright
-        except ImportError:
-            print("Error: Playwright not installed. Run: pip install playwright")
-            print("Then run: playwright install chromium")
-            return []
-
         all_dealers = []
 
-        # First, analyze the site
+        # First, analyze the site (includes discovery + config generation)
         await self.analyze_site()
 
-        async with async_playwright() as p:
-            # Launch browser
-            self.browser = await p.chromium.launch(
-                headless=self.headless,
-                args=[
-                    '--disable-blink-features=AutomationControlled',
-                    '--no-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-http2',  # Avoid HTTP2 protocol errors
-                ]
-            )
+        # Scrape each zip code (Crawl4AI handles browser automation internally)
+        consecutive_errors = 0
+        max_consecutive_errors = 5
 
-            await self._create_new_context()
+        for i, zip_code in enumerate(zip_codes):
+            print(f"[{i+1}/{len(zip_codes)}] Scraping {self.domain} for {zip_code}...")
 
             try:
-                consecutive_errors = 0
-                max_consecutive_errors = 5
+                dealers = await self._scrape_zip(zip_code)
+                all_dealers.extend(dealers)
+                print(f"  Found {len(dealers)} dealers")
+                consecutive_errors = 0  # Reset on success
 
-                for i, zip_code in enumerate(zip_codes):
-                    print(f"[{i+1}/{len(zip_codes)}] Scraping {self.domain} for {zip_code}...")
+            except Exception as e:
+                error_msg = str(e)
+                print(f"  Error scraping {zip_code}: {error_msg}")
+                consecutive_errors += 1
 
-                    try:
-                        dealers = await self._scrape_zip(zip_code)
-                        all_dealers.extend(dealers)
-                        print(f"  Found {len(dealers)} dealers")
-                        consecutive_errors = 0  # Reset on success
+                # If too many consecutive errors, take a longer break
+                if consecutive_errors >= max_consecutive_errors:
+                    print(f"  Too many consecutive errors ({consecutive_errors}), taking a 30s break...")
+                    await asyncio.sleep(30)
+                    consecutive_errors = 0
 
-                    except Exception as e:
-                        error_msg = str(e)
-                        print(f"  Error scraping {zip_code}: {error_msg}")
-                        consecutive_errors += 1
+                continue
 
-                        # If we hit HTTP2/connection errors, recreate context
-                        if 'ERR_HTTP2' in error_msg or 'net::' in error_msg:
-                            print(f"  Connection error detected, recreating browser context...")
-                            await self._recreate_context()
-                            await asyncio.sleep(3)  # Extra delay after recreating
-
-                        # If too many consecutive errors, take a longer break
-                        if consecutive_errors >= max_consecutive_errors:
-                            print(f"  Too many consecutive errors, taking a 30s break...")
-                            await self._recreate_context()
-                            await asyncio.sleep(30)
-                            consecutive_errors = 0
-
-                        continue
-
-                    # Delay between requests (longer to avoid rate limiting)
-                    delay = self.interactions.get('wait_after_search', 2)
-                    await asyncio.sleep(max(delay, 2))
-
-                    # Recreate context every 50 requests to avoid stale connections
-                    if (i + 1) % 50 == 0:
-                        print(f"  Refreshing browser context after {i+1} requests...")
-                        await self._recreate_context()
-
-            finally:
-                await self.browser.close()
-
-        return all_dealers
-
-    async def _create_new_context(self):
-        """Create a new browser context and page."""
-        self.context = await self.browser.new_context(
-            viewport={'width': 1920, 'height': 1080},
-            user_agent=(
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
-                'AppleWebKit/537.36 (KHTML, like Gecko) '
-                'Chrome/120.0.0.0 Safari/537.36'
-            )
-        )
-        self.page = await self.context.new_page()
-
-    async def _recreate_context(self):
-        """Close current context and create a new one."""
-        try:
-            if self.context:
-                await self.context.close()
-        except Exception:
-            pass
-        await self._create_new_context()
+            # Delay between requests to avoid rate limiting
+            delay = self.interactions.get('wait_after_search', 2)
+            await asyncio.sleep(max(delay, 2))
 
         return all_dealers
 
     async def _scrape_zip(self, zip_code: str) -> List[Dealer]:
         """
-        Scrape dealers for a single zip code.
+        Scrape dealers for a single zip code using Crawl4AI.
+
+        Workflow:
+        1. Use Crawl4AI to fill form and submit search
+        2. Post-search validation (once per domain)
+        3. Expand results (Load More / scroll)
+        4. Extract dealers from HTML
 
         Args:
             zip_code: Zip code to search
@@ -482,95 +411,287 @@ class GenericDealerScraper:
         """
         dealers = []
 
-        # Get timing config
-        wait_after_page_load = self.interactions.get('wait_after_page_load', 3)
-        wait_after_search = self.interactions.get('wait_after_search', 4)
-        click_delay = self.interactions.get('click_delay', 0.3)
+        try:
+            # Step 1: Execute search with Crawl4AI
+            if self.debug:
+                print(f"  Crawl4AI: Executing search for zip {zip_code}...")
 
-        # Navigate to page with retry logic
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                # Use 'domcontentloaded' instead of 'networkidle' for faster loading
-                await self.page.goto(self.url, wait_until='domcontentloaded', timeout=60000)
-                await asyncio.sleep(wait_after_page_load)
-                break
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    print(f"  Retry {attempt + 1}/{max_retries} after error: {e}")
-                    await asyncio.sleep(2)
-                    continue
-                print(f"  Error loading page: {e}")
+            html = await self.crawl4ai.scrape_with_search(
+                url=self.url,
+                zip_code=zip_code,
+                config=self.config,
+                expand_results=True  # Handles Load More / scroll automatically
+            )
+
+            if not html:
+                print(f"  Error: Crawl4AI returned no HTML for {zip_code}")
                 return dealers
 
-        # Handle cookie popup
-        await self._handle_cookie_popup()
+            if self.debug:
+                print(f"  Crawl4AI: Received {len(html)} chars of HTML")
 
-        # Handle location modal/popup if present (e.g., Acura prompt)
-        await self._handle_location_prompt(zip_code)
+            # Check if LLM discovered new data field selectors
+            if html.startswith('<!-- DISCOVERED_SELECTORS:'):
+                import re
+                import json
+                match = re.search(r'<!-- DISCOVERED_SELECTORS: (.+?) -->', html)
+                if match:
+                    discovered_selectors = json.loads(match.group(1))
+                    if discovered_selectors.get('data_fields'):
+                        # Update config with LLM-discovered data fields
+                        self.config['data_fields'] = discovered_selectors['data_fields']
+                        self.data_fields = discovered_selectors['data_fields']
+                        if self.debug:
+                            print(f"  Using LLM-discovered data field selectors:")
+                            for field, cfg in self.data_fields.items():
+                                if isinstance(cfg, dict):
+                                    print(f"    - {field}: {cfg.get('selector', 'N/A')}")
+                    # Remove the comment from HTML
+                    html = re.sub(r'<!-- DISCOVERED_SELECTORS: .+? -->\n', '', html)
 
-        # Optional debug: log candidate inputs and frames
-        if self.debug:
-            await self._debug_log_inputs()
+            # Step 2: Post-search validation (runs once per domain)
+            # Skip validation if explicitly disabled (e.g., for manual configs)
+            post_search_config = self.config.get('post_search_validation', {})
+            validation_enabled = post_search_config.get('enabled', True)  # Default: enabled
 
-        # Find and fill search input
-        search_input = await self._find_search_input()
-        if not search_input:
-            print(f"  Could not find search input")
+            if not self.validated and validation_enabled:
+                print(f"  Validating search results for {self.domain}...")
+                validation = self.post_validator.validate_search_results(
+                    html=html,
+                    url=self.url,
+                    expected_config=self.config
+                )
+
+                if validation.get('needs_refinement'):
+                    print(f"  Refining selectors (confidence: {validation.get('confidence', 0.0):.2f})...")
+
+                    # Try LLM refinement if heuristics have low confidence
+                    if validation.get('confidence', 0.0) < 0.7:
+                        print(f"  Using LLM for selector refinement...")
+                        self.config = self.post_validator.refine_selectors_with_llm(
+                            html=html,
+                            url=self.url,
+                            original_config=self.config
+                        )
+                    else:
+                        # Use heuristic refinement
+                        self.config = self.post_validator.refine_selectors(
+                            validation, self.config
+                        )
+
+                    # Reload config sections after refinement
+                    self.selectors = self.config.get('selectors', {})
+                    self.data_fields = self.config.get('data_fields', {})
+
+                    print(f"  Refined selectors: {self.selectors.get('dealer_cards', [])}")
+
+                self.validated = True
+            elif not self.validated:
+                print(f"  Post-search validation disabled (manual config)")
+                self.validated = True
+
+            # Step 3: Extract dealers from HTML
+            dealers = self._extract_dealers_from_html(html, zip_code)
+
+            if self.debug:
+                print(f"  Extracted {len(dealers)} dealers from HTML")
+
             return dealers
-
-        try:
-            await search_input.click()
-            await search_input.fill('')  # Clear
-            await asyncio.sleep(click_delay)
-            await search_input.fill(zip_code)
-            await asyncio.sleep(click_delay)
-            await self._select_zip_suggestion(search_input, zip_code)
-
-            # Execute search sequence
-            search_sequence = self.interactions.get('search_sequence', ['fill_input', 'press_enter'])
-            if 'click_search' in search_sequence:
-                search_button = await self._find_search_button()
-                if search_button:
-                    await search_button.click()
-                else:
-                    await search_input.press('Enter')
-            else:
-                await search_input.press('Enter')
-
-            await asyncio.sleep(wait_after_search)
 
         except Exception as e:
-            print(f"  Error interacting with search: {e}")
+            print(f"  Error in _scrape_zip for {zip_code}: {e}")
+            if self.debug:
+                import traceback
+                traceback.print_exc()
             return dealers
 
-        # Handle "Apply" button if present
-        await self._handle_apply_button()
+    def _extract_dealers_from_html(self, html: str, zip_code: str) -> List[Dealer]:
+        """
+        Extract dealers from HTML using BeautifulSoup.
 
-        # Wait for dealer cards
-        try:
-            await self.page.wait_for_selector(
-                self._get_dealer_card_selector(),
-                timeout=10000
-            )
-        except Exception:
-            print(f"  Warning: No dealer cards found initially")
-            if await self._handle_search_this_area_button():
-                try:
-                    await self.page.wait_for_selector(
-                        self._get_dealer_card_selector(),
-                        timeout=10000
-                    )
-                except Exception:
-                    print(f"  Warning: No dealer cards found after map search")
+        Args:
+            html: HTML string from Crawl4AI
+            zip_code: Search zip code
 
-        # Expand results (View More / scroll)
-        await self._expand_results()
+        Returns:
+            List of Dealer objects
+        """
+        dealers = []
+        soup = BeautifulSoup(html, 'html.parser')
 
-        # Extract dealers
-        dealers = await self._extract_dealers(zip_code)
+        # Get dealer card selectors
+        card_selectors = self.selectors.get('dealer_cards', [])
+        if not card_selectors:
+            print("  Warning: No dealer card selectors configured")
+            return dealers
+
+        # Find dealer cards
+        cards = []
+        for selector in card_selectors:
+            try:
+                found_cards = soup.select(selector)
+                if found_cards:
+                    cards = found_cards
+                    if self.debug:
+                        print(f"  Found {len(cards)} cards with selector: {selector}")
+                    break
+            except Exception as e:
+                if self.debug:
+                    print(f"  Selector error ({selector}): {e}")
+                continue
+
+        if not cards:
+            print(f"  No dealer cards found in HTML")
+            return dealers
+
+        print(f"  Processing {len(cards)} dealer cards...")
+
+        # Extract each dealer
+        for i, card in enumerate(cards):
+            try:
+                dealer = self._parse_dealer_card(card, zip_code)
+                if dealer and self._is_valid_dealer(dealer):
+                    # Deduplication
+                    dealer_key = f"{dealer.name}|{dealer.zip_code}".lower()
+                    if dealer_key not in self.seen_dealers:
+                        self.seen_dealers.add(dealer_key)
+                        dealers.append(dealer)
+                    elif self.debug:
+                        print(f"    Skipped duplicate: {dealer.name}")
+            except Exception as e:
+                if self.debug:
+                    print(f"    Error parsing card {i}: {e}")
+                continue
 
         return dealers
+
+    def _parse_dealer_card(self, card, zip_code: str) -> Optional[Dealer]:
+        """
+        Parse a single dealer card element to extract dealer information.
+
+        Args:
+            card: BeautifulSoup element representing a dealer card
+            zip_code: Search zip code
+
+        Returns:
+            Dealer object or None if parsing failed
+        """
+        # Extract name
+        name = self._extract_field(card, self.data_fields.get('name', {}))
+        if not name:
+            if self.debug:
+                print(f"    Skipped card: no name found")
+            return None
+
+        name = clean_name(name)
+
+        # Extract address
+        address_raw = self._extract_field(card, self.data_fields.get('address', {}))
+        address_parts = parse_address(address_raw) if address_raw else {}
+
+        # Extract phone
+        phone_raw = self._extract_field(card, self.data_fields.get('phone', {}))
+        phone = extract_phone(phone_raw, card.get_text()) if phone_raw else ""
+
+        # Extract website
+        website_raw = self._extract_field(card, self.data_fields.get('website', {}))
+        website = extract_website_url(website_raw, self.domain) if website_raw else ""
+
+        # Extract distance (optional)
+        distance_text = card.get_text()
+        distance = extract_distance(distance_text)
+
+        # Extract dealer type (optional, e.g., "Elite", "Certified")
+        dealer_type = self._extract_field(card, self.data_fields.get('dealer_type', {})) or "Standard"
+
+        return Dealer(
+            source_url=self.url,
+            name=name,
+            address=address_parts.get('street', address_raw or ""),
+            city=address_parts.get('city', ""),
+            state=address_parts.get('state', ""),
+            zip_code=address_parts.get('zip', ""),
+            phone=phone,
+            website=website,
+            dealer_type=dealer_type,
+            distance_miles=distance,
+            search_zip=zip_code,
+            scrape_date=self.scrape_date
+        )
+
+    def _extract_field(self, card, field_config: Dict) -> str:
+        """
+        Extract a field from a dealer card using configured selectors.
+
+        Args:
+            card: BeautifulSoup element
+            field_config: Field configuration dict with selector, type, etc.
+
+        Returns:
+            Extracted text or empty string
+        """
+        if not field_config:
+            return ""
+
+        # Try primary selector
+        selector = field_config.get('selector')
+        if selector:
+            element = card.select_one(selector)
+            if element:
+                return self._get_element_value(element, field_config)
+
+        # Try fallback patterns
+        fallback_patterns = field_config.get('fallback_patterns', [])
+        for pattern in fallback_patterns:
+            element = card.select_one(pattern)
+            if element:
+                return self._get_element_value(element, field_config)
+
+        return ""
+
+    def _get_element_value(self, element, field_config: Dict) -> str:
+        """
+        Get value from a BeautifulSoup element based on field type.
+
+        Args:
+            element: BeautifulSoup element
+            field_config: Field configuration
+
+        Returns:
+            Extracted value
+        """
+        field_type = field_config.get('type', 'text')
+
+        if field_type == 'text':
+            return element.get_text(strip=True)
+        elif field_type == 'href':
+            attribute = field_config.get('attribute', 'href')
+            return element.get(attribute, '') or ''
+        else:
+            return element.get_text(strip=True)
+
+    def _is_valid_dealer(self, dealer: Dealer) -> bool:
+        """
+        Validate dealer object has minimum required information.
+
+        Args:
+            dealer: Dealer object
+
+        Returns:
+            True if dealer is valid
+        """
+        if not dealer.name:
+            return False
+
+        # Check against skip names
+        name_lower = dealer.name.lower()
+        for skip_name in self.SKIP_NAMES:
+            if skip_name in name_lower and len(dealer.name) < 50:
+                if self.debug:
+                    print(f"    Skipped (matches skip pattern): {dealer.name}")
+                return False
+
+        return True
 
     async def _handle_cookie_popup(self):
         """Handle common cookie consent popups."""

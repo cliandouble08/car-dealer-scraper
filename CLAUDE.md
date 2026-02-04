@@ -5,9 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 This is a generalized web scraping system for extracting car dealership information from any dealer locator website. The scraper uses:
-1. **Jina Reader**: Converts web pages to LLM-friendly text and captures screenshots
-2. **Local LLM (Ollama/Llama)**: Analyzes page structure to identify selectors and interaction patterns
-3. **Playwright**: Browser automation for scraping with the LLM-identified patterns
+1. **Crawl4AI**: Unified browser automation for URL discovery, form submission, and data extraction
+2. **LLM Form Discovery**: Real-time intelligent form field identification using Crawl4AI's LLMExtractionStrategy
+3. **Jina Reader**: Converts web pages to LLM-friendly text and captures screenshots
+4. **Local LLM (Ollama/Gemma)**: Analyzes page structure and dynamically discovers form elements
+5. **Post-Search Validation**: Validates and refines selectors based on actual search results
+6. **Iframe Support**: Automatic detection and processing of embedded iframe content
 
 ## Core Architecture
 
@@ -17,7 +20,7 @@ This is a generalized web scraping system for extracting car dealership informat
 - `GenericDealerScraper`: Works with any dealer locator URL
 - `scrape_website()`: Async function to scrape a single website
 - `scrape_parallel()`: Parallel execution with multiple workers
-- Uses Playwright for browser automation (async)
+- Uses Crawl4AI for all browser automation (async)
 
 **config_manager.py** - Configuration management
 - Supports both brand names (e.g., 'ford') and domains (e.g., 'ford.com')
@@ -25,8 +28,11 @@ This is a generalized web scraping system for extracting car dealership informat
 - `ConfigManager.get_config()`: Merges configs using deep merge strategy
 
 **utils/** - Utility modules
+- `crawl4ai_scraper.py`: Crawl4AI-based browser automation for form submission and scraping
+- `post_search_validator.py`: Post-search validation and selector refinement
+- `firecrawl_discovery.py`: Crawl4AI-based URL discovery for dealer locator pages
 - `jina_reader.py`: Fetches LLM-friendly content and screenshots via Jina Reader API
-- `llm_analyzer.py`: LLM-based page structure analysis using Ollama
+- `llm_analyzer.py`: LLM-based page structure analysis (generates Crawl4AI JavaScript templates)
 - `dynamic_config.py`: Config generation from LLM analysis results
 - `extraction.py`: Text extraction (phone, address, website, distance)
 
@@ -41,6 +47,9 @@ Each config contains:
 - `selectors`: CSS selectors for page elements (search inputs, dealer cards, buttons)
 - `data_fields`: Selectors for extracting specific dealer info (name, address, phone, website)
 - `interactions`: Timing parameters and behavior (search_sequence, pagination_type)
+- `crawl4ai_interactions`: JavaScript code templates for Crawl4AI browser automation
+- `post_search_validation`: Validation settings (always enabled for accuracy)
+- `discovery`: Crawl4AI-based URL discovery settings
 - `extraction`: Regex patterns for extracting data from text
 
 ### Workflow
@@ -48,17 +57,20 @@ Each config contains:
 ```
 1. Load websites from websites.txt
 2. For each website:
-   a. Fetch page with Jina Reader
-   b. Save screenshot and text to data/analysis/{domain}/
-   c. Analyze with LLM to identify selectors
-   d. Cache generated config
-   e. For each zip code:
-      - Navigate to page with Playwright
-      - Fill search input with zip code
-      - Click search/press Enter
-      - Expand results (View More / scroll)
-      - Extract dealer info from cards
-   f. Save results to output/
+   a. Discovery: Use Crawl4AI to find dealer locator URL (cached 30 days)
+   b. Pre-Search Analysis:
+      - Fetch page with Jina Reader
+      - Save screenshot and text to data/analysis/{domain}/
+      - Analyze with LLM to generate Crawl4AI config (JavaScript templates)
+      - Cache generated config
+   c. For each zip code:
+      - Use Crawl4AI to fill form and submit search
+      - Post-search validation (once per domain):
+         * Verify dealer cards appeared
+         * Refine selectors if needed using LLM
+      - Crawl4AI expands results (Load More / virtual scroll)
+      - Extract dealer info from HTML with BeautifulSoup
+   d. Save results to output/
 3. Move to next website
 ```
 
@@ -67,7 +79,7 @@ Each config contains:
 ### Install Dependencies
 ```bash
 pip install -r requirements.txt
-playwright install chromium
+# Note: Crawl4AI handles browser installation automatically
 ```
 
 ### Scraping
@@ -96,7 +108,7 @@ python generate_centroid_zips.py --radius 75 --output custom_zips.txt
 ```bash
 # Install and start Ollama
 curl -fsSL https://ollama.ai/install.sh | sh
-ollama pull llama3
+ollama pull gemma2:2b
 ollama serve
 ```
 
@@ -138,15 +150,25 @@ The LLM prompt asks for:
 - `selectors`: CSS selectors for page elements
 - `data_fields`: How to extract dealer info from cards
 - `interactions`: Search sequence and pagination type
+- `crawl4ai_interactions`: JavaScript code templates for browser automation
 - `input_fields`: Zip code and radius inputs
 
-### Playwright vs Selenium
+### Crawl4AI-Based Automation
 
-The project uses Playwright because:
-- Better async support
-- Built-in auto-waiting
-- More reliable for dynamic content
-- Simpler selector syntax (`:has-text()`, etc.)
+The project uses Crawl4AI for all browser automation:
+- **URL Discovery**: Crawls manufacturer homepages to find dealer locator URLs
+- **Form Submission**: Executes LLM-generated JavaScript to fill forms and submit searches
+- **Result Expansion**: Handles "Load More" buttons and infinite scroll automatically
+- **Virtual Scrolling**: Twitter-style infinite scroll support
+- **HTML Extraction**: Returns full HTML for BeautifulSoup parsing
+
+### Post-Search Validation
+
+Runs once per domain to improve accuracy:
+- Verifies dealer cards appeared after search submission
+- Uses heuristics to find alternative selectors if expected ones fail
+- Falls back to LLM refinement for low-confidence results
+- Updates config automatically for subsequent zip codes
 
 ### Parallel Execution
 
@@ -222,10 +244,10 @@ export LLM_ANALYSIS_ENABLED="true"  # Enable/disable LLM analysis
 
 ## Troubleshooting
 
-### Playwright Not Installed
+### Crawl4AI Not Installed
 ```bash
-pip install playwright
-playwright install chromium
+pip install crawl4ai
+# Crawl4AI handles browser installation automatically
 ```
 
 ### LLM Connection Error

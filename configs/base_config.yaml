@@ -168,3 +168,77 @@ extraction:
     - "google.com"
     - "tel:"
     - "mailto:"
+
+# Crawl4AI-specific interactions (JavaScript templates for browser automation)
+crawl4ai_interactions:
+  # Search action: Fill the search input with zip code
+  search_action:
+    type: js_code
+    code_template: |
+      const input = document.querySelector('{SEARCH_SELECTOR}');
+      if (input) {
+        input.value = '{ZIP_CODE}';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    wait_after: 2
+    wait_for: "css:.dealer-card"
+
+  # Search submit: Click search button or press Enter
+  search_submit:
+    type: js_code
+    code_template: |
+      const btn = document.querySelector('{BUTTON_SELECTOR}');
+      if (btn) {
+        btn.click();
+      } else {
+        const input = document.querySelector('{SEARCH_SELECTOR}');
+        if (input) {
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+        }
+      }
+    alternative: press_enter
+
+  # Load more action: Click "Load More" / "View More" button
+  load_more_action:
+    type: js_code
+    code_template: |
+      const btn = document.querySelector('{LOAD_MORE_SELECTOR}');
+      if (btn && btn.offsetParent !== null) {
+        btn.click();
+        return true;
+      }
+      return false;
+    max_iterations: 30
+
+  # Virtual scroll configuration (for infinite scroll pages)
+  virtual_scroll:
+    enabled: false  # Set to true for Twitter-style infinite scroll
+    container_selector: null  # CSS selector for scroll container (null = use body)
+    scroll_count: 30  # Number of scroll actions to perform
+    scroll_by: container_height  # Options: container_height, pixels, page_height
+    wait_after_scroll: 0.5  # Seconds to wait after each scroll
+
+# Post-search validation settings
+post_search_validation:
+  enabled: true  # Always enabled for accuracy
+  expected_elements:
+    - dealer_cards
+  min_dealer_count: 1
+  confidence_threshold: 0.7
+  use_llm_refinement: true  # Use LLM to refine selectors if heuristics fail
+
+# Discovery settings (Crawl4AI-based URL discovery)
+discovery:
+  use_crawl4ai: true  # Use Crawl4AI for link discovery
+  cache_ttl_days: 30  # Cache TTL for discovery results
+  max_depth: 2  # Maximum crawl depth (1 = homepage only, 2 = homepage + 1 level)
+  max_urls_to_analyze: 100  # Maximum URLs to fetch from homepage
+  filter_keywords:  # Keywords to filter dealer locator URLs
+    - dealer
+    - locator
+    - find
+    - locate
+    - directory
+    - location
+    - store

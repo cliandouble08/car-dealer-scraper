@@ -10,9 +10,11 @@ YAML configuration files with fallback to base defaults.
 import os
 import re
 import yaml
+import json
 from typing import Dict, Optional, Any
 from pathlib import Path
 from urllib.parse import urlparse
+from datetime import datetime
 
 from utils.dynamic_config import load_dynamic_config, save_dynamic_config
 
@@ -264,6 +266,94 @@ class ConfigManager:
         """Get data fields configuration for extracting dealer info."""
         config = self.get_config(site_key)
         return config.get('data_fields', {})
+
+    def get_crawl4ai_interactions_config(self, site_key: str) -> Dict[str, Any]:
+        """Get Crawl4AI interactions configuration (JavaScript templates, etc.)."""
+        config = self.get_config(site_key)
+        return config.get('crawl4ai_interactions', {})
+
+    def get_post_search_validation_config(self, site_key: str) -> Dict[str, Any]:
+        """Get post-search validation configuration."""
+        config = self.get_config(site_key)
+        return config.get('post_search_validation', {})
+
+    def get_discovery_config(self, site_key: str) -> Dict[str, Any]:
+        """Get discovery configuration (Crawl4AI-based URL discovery settings)."""
+        config = self.get_config(site_key)
+        return config.get('discovery', {})
+
+    # Discovery cache management methods
+    def get_discovery_cache_path(self, domain: str) -> Path:
+        """
+        Get cache file path for discovery results.
+
+        Args:
+            domain: Domain name (e.g., 'ford.com')
+
+        Returns:
+            Path to discovery cache file
+        """
+        cache_dir = Path("data/discovery_cache")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        normalized = self._normalize_key(domain)
+        return cache_dir / f"{normalized}.json"
+
+    def get_cached_discovery(self, domain: str, ttl_days: int = 30) -> Optional[Dict]:
+        """
+        Load cached discovery result if still valid.
+
+        Args:
+            domain: Domain name
+            ttl_days: Cache TTL in days (default: 30)
+
+        Returns:
+            Cached discovery result or None if expired/missing
+        """
+        cache_path = self.get_discovery_cache_path(domain)
+        if not cache_path.exists():
+            return None
+
+        try:
+            with open(cache_path, 'r') as f:
+                data = json.load(f)
+
+                # Check TTL
+                if 'cached_at' in data:
+                    cached_at = datetime.fromisoformat(data['cached_at'])
+                    age = (datetime.now() - cached_at).days
+                    if age < ttl_days:
+                        return data
+                    else:
+                        print(f"Discovery cache expired for {domain} (age: {age} days)")
+                        return None
+
+                # Legacy cache without timestamp
+                return data
+
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            print(f"Error loading discovery cache for {domain}: {e}")
+            return None
+
+    def cache_discovery_result(self, domain: str, result: Dict):
+        """
+        Cache discovery result to file.
+
+        Args:
+            domain: Domain name
+            result: Discovery result dictionary
+        """
+        cache_path = self.get_discovery_cache_path(domain)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Add timestamp
+        result['cached_at'] = datetime.now().isoformat()
+
+        try:
+            with open(cache_path, 'w') as f:
+                json.dump(result, f, indent=2)
+            print(f"Cached discovery result for {domain}")
+        except Exception as e:
+            print(f"Error caching discovery result for {domain}: {e}")
 
 
 # Global config manager instance

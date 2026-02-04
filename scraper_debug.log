@@ -1,0 +1,51 @@
+AI features enabled - using Jina Reader and LLM analysis
+Loaded 1 zip codes
+Loaded 1 websites to scrape
+
+============================================================
+[1/1] Scraping ford.com...
+URL: https://www.ford.com/
+============================================================
+  Using cached LLM config for ford.com
+  > Redirecting to known locator URL from cache: https://www.ford.com/dealerships/
+[1/1] Scraping ford.com for 10001...
+[FETCH]... ↓ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 2.21s 
+[SCRAPE].. ◆ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 0.10s 
+[COMPLETE] ● https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 2.33s 
+[FETCH]... ↓ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 0.84s 
+[SCRAPE].. ◆ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 0.00s 
+[COMPLETE] ● https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 0.84s 
+[FETCH]... ↓ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 2.58s 
+[SCRAPE].. ◆ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 0.00s 
+[COMPLETE] ● https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 2.58s 
+  Warning: No dealer cards found after search (selector: li[class*=\'dealer\'])
+[FETCH]... ↓ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 1.58s 
+[SCRAPE].. ◆ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 0.00s 
+[COMPLETE] ● https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 1.58s 
+  Validating search results for ford.com...
+Post-search validation: No dealers found with expected selectors, analyzing HTML...
+No dealers found even with heuristic analysis
+  Refining selectors (confidence: 0.10)...
+  Using LLM for selector refinement...
+LLM could not find dealer cards
+  Refined selectors: ["li[class*='dealer']", "div[class*='dealer']"]
+  No dealer cards found in HTML
+  Found 0 dealers
+
+No dealers found for ford.com
+
+============================================================
+COMPLETE: Found 0 dealers across all websites
+============================================================

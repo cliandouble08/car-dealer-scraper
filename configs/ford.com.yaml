@@ -1,0 +1,64 @@
+site: ford.com
+base_url: https://www.ford.com/dealerships/
+manual_config: true  # This overrides LLM-generated config
+notes: |
+  Ford uses direct URL navigation with zipcode parameter.
+  Dealers load via AJAX, so need to wait for data to appear.
+  URL format: https://www.ford.com/dealerships/?zipcode=10001
+
+post_search_validation:
+  enabled: false  # Disable validation for manual config - selectors are already correct
+
+selectors:
+  search_input:
+    - input#zip  # Not needed for direct URL approach
+  search_button:
+    - button.search  # Not needed for direct URL approach
+  dealer_cards:
+    # Based on actual Ford HTML structure: <li class="dealer">
+    - 'li.dealer[data-pacode]'  # Most specific - li with class "dealer" and data-pacode attribute
+    - 'li.dealer'  # Fallback
+
+data_fields:
+  name:
+    selector: .dealer-name  # <span class="dealer-name">
+    type: text
+    fallback_patterns:
+      - '.name .dealer-name'
+      - 'a.dealer-detail-link .dealer-name'
+  address:
+    selector: .street-city-state-zip  # <div class="street-city-state-zip">
+    type: text
+    fallback_patterns:
+      - '.address'
+      - '[class*="street-city"]'
+  phone:
+    selector: 'a[href^="tel:"]'  # <a href="tel://(617) 518-4684">
+    type: href
+    attribute: href
+    fallback_patterns:
+      - '.phone a'
+      - '.desk-phone .phone-link'
+  website:
+    selector: 'a.dealer-website'  # <a class="btn ... dealer-website">
+    type: href
+    attribute: href
+    fallback_patterns:
+      - '.dealer-website'
+  distance:
+    selector: 'span.distance'  # <span class="distance">1.52 mi</span>
+    type: text
+
+interactions:
+  use_direct_url: true  # Use direct URL instead of form submission
+  url_template: "https://www.ford.com/dealerships/?zipcode={ZIP_CODE}"
+  wait_after_page_load: 15  # Wait longer for AJAX dealers to load
+  pagination_type: scroll  # Might have infinite scroll
+  wait_after_search: 5
+  wait_for_selector: '[class*="dealer-result"], li[role="listitem"], .dealer-listing'  # Wait for actual dealer cards
+
+extraction:
+  phone_patterns:
+    - \(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}
+  address_patterns:
+    - .+?,\s*[A-Za-z\s]+,\s*[A-Z]{2}\s+\d{5}

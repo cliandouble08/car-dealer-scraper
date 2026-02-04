@@ -1,0 +1,68 @@
+AI features enabled - using Jina Reader and LLM analysis
+Loaded 1 zip codes
+Loaded 1 websites to scrape
+
+============================================================
+[1/1] Scraping ford.com...
+URL: https://www.ford.com/
+============================================================
+  Discovering dealer locator URL for https://www.ford.com/...
+Using cached discovery result for ford.com (age: 0 days)
+  > Discovery: Found locator at https://www.ford.com/dealerships/ (confidence: 0.90, method: crawl4ai)
+  Analyzing https://www.ford.com/dealerships/ with LLM...
+  Fetching content from https://www.ford.com/dealerships/...
+  Saved content to data/analysis/ford.com/20260203_203209_content.txt
+  LLM analysis complete (confidence: 0.85)
+Saved LLM-generated config to: configs/llm_generated/ford_com_llm.yaml
+  Saved analysis summary to data/analysis/ford.com/20260203_203244_analysis_summary.txt
+  LLM-generated config saved for ford.com
+[1/1] Scraping ford.com for 10001...
+[FETCH]... ↓ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 4.83s 
+[SCRAPE].. ◆ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 0.10s 
+[COMPLETE] ● https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 4.94s 
+[SCRAPE].. ◆ Failed to remove overlay elements: Page.evaluate: Execution context
+was destroyed, most likely because of a navigation. 
+[FETCH]... ↓ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 1.80s 
+[SCRAPE].. ◆ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 0.00s 
+[COMPLETE] ● https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 1.80s 
+[SCRAPE].. ◆ Failed to remove overlay elements: Page.evaluate: Execution context
+was destroyed, most likely because of a navigation. 
+[FETCH]... ↓ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 3.59s 
+[SCRAPE].. ◆ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 0.00s 
+[COMPLETE] ● https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 3.59s 
+  Warning: No dealer cards found after search (selector: li[class*=\'dealer\'])
+  DEBUG: Saved HTML to /Users/cameronlian/Desktop/development/dealership-scraping/debug_html/ford.com_10001_debug.html
+[SCRAPE].. ◆ Failed to remove overlay elements: Page.evaluate: Execution context
+was destroyed, most likely because of a navigation. 
+[FETCH]... ↓ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 2.68s 
+[SCRAPE].. ◆ https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 0.00s 
+[COMPLETE] ● https://www.ford.com/dealerships/                                  
+| ✓ | ⏱: 2.68s 
+[WARNING]. ⚠ Session auto-kill is enabled in the new version. No need to 
+manually kill sessions. 
+  Validating search results for ford.com...
+Post-search validation: No dealers found with expected selectors, analyzing HTML...
+No dealers found even with heuristic analysis
+  Refining selectors (confidence: 0.10)...
+  Using LLM for selector refinement...
+LLM could not find dealer cards
+  Refined selectors: ["li[class*='dealer']", "div[class*='dealer']"]
+  No dealer cards found in HTML
+  Found 0 dealers
+
+No dealers found for ford.com
+
+============================================================
+COMPLETE: Found 0 dealers across all websites
+============================================================
