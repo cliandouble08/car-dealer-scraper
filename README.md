@@ -61,8 +61,34 @@ https://www.toyota.com/dealers/
 ```
 
 **Zip Codes:**
-You can provide zip codes directly or use a file.
--   Use `generate_centroid_zips.py` to create an optimized list for nationwide coverage (see below).
+You can provide zip codes directly via `--zip-codes` or use a file via `--zip-file`.
+
+**Option 1: Inline zip codes**
+```bash
+python scrape_dealers.py --websites websites.txt --zip-codes "10001,90210,60601"
+```
+
+**Option 2: Zip codes from a .txt file**
+Create a text file with one zip code per line:
+```text
+# Comments start with #
+10001
+90210
+60601
+# 00000  # Commented out zip codes are skipped
+```
+
+Then use the `--zip-file` flag:
+```bash
+python scrape_dealers.py --websites websites.txt --zip-file my_zip_codes.txt
+```
+
+You can also combine both flags - zip codes from both sources will be merged:
+```bash
+python scrape_dealers.py --websites websites.txt --zip-codes "10001" --zip-file additional_zips.txt
+```
+
+**Tip:** Use `generate_centroid_zips.py` to create an optimized list for nationwide coverage (see below).
 
 ### 2. Run the Scraper
 
