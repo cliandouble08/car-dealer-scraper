@@ -77,6 +77,65 @@ class Crawl4AIDiscovery:
         if not CRAWL4AI_AVAILABLE:
             print("Warning: crawl4ai not installed. Run: pip install crawl4ai")
 
+    def _extract_links_from_html(
+        self, html: str, base_url: str, base_domain: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Fallback method to extract links from raw HTML when result.links is empty.
+        
+        Args:
+            html: Raw HTML content
+            base_url: Base URL for resolving relative links
+            base_domain: Domain for determining internal vs external
+            
+        Returns:
+            List of link dicts with 'url', 'text', 'is_internal'
+        """
+        links = []
+        seen_urls = set()
+        
+        # Regex pattern to match <a> tags with href
+        # Handles both single and double quotes, and various attribute orders
+        anchor_pattern = re.compile(
+            r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>',
+            re.IGNORECASE | re.DOTALL
+        )
+        
+        for match in anchor_pattern.finditer(html):
+            href = match.group(1).strip()
+            text = match.group(2).strip()
+            
+            # Skip javascript:, mailto:, tel:, and empty links
+            if not href or href.startswith(('javascript:', 'mailto:', 'tel:', '#')):
+                continue
+            
+            # Resolve relative URLs
+            full_url = urljoin(base_url, href)
+            
+            # Normalize URL (remove fragment)
+            parsed = urlparse(full_url)
+            normalized_url = parsed._replace(fragment='').geturl()
+            
+            # Skip duplicates
+            if normalized_url in seen_urls:
+                continue
+            seen_urls.add(normalized_url)
+            
+            # Determine if internal
+            link_domain = parsed.netloc.replace('www.', '')
+            is_internal = link_domain == base_domain or not link_domain
+            
+            # Clean up text (remove HTML tags)
+            clean_text = re.sub(r'<[^>]+>', '', text).strip()
+            
+            links.append({
+                'url': normalized_url,
+                'text': clean_text,
+                'is_internal': is_internal
+            })
+        
+        return links
+
     async def discover_urls(self, url: str) -> Dict[str, Any]:
         """
         Crawl a website and extract all internal URLs.
@@ -104,12 +163,15 @@ class Crawl4AIDiscovery:
             viewport_height=1080,
         )
 
-        # Use CSS selector wait instead of JS function (more compatible across versions)
-        # Wait for body to have content - simple and reliable
+        # Configuration for JavaScript-heavy sites
+        # - wait_for: Wait for navigation links to appear in the DOM
+        # - delay_before_return_html: Additional wait for dynamic content
+        # - remove_overlay_elements: Disabled to avoid context destruction on redirect
         crawler_config = CrawlerRunConfig(
             page_timeout=60000,  # 60 seconds for slow-loading sites with verification
-            delay_before_return_html=3.0,  # Wait 3 seconds for dynamic content to load
-            remove_overlay_elements=True,
+            delay_before_return_html=5.0,  # Wait 5 seconds for dynamic content to load
+            wait_for="css:a[href]",  # Wait for at least one link to appear
+            remove_overlay_elements=False,  # Disable to avoid issues with navigation/redirects
         )
 
         try:
@@ -197,6 +259,21 @@ class Crawl4AIDiscovery:
                                 })
                             else:
                                 external_links.append(normalized['url'])
+
+                # Fallback: Extract links from HTML if result.links is empty
+                if not internal_links and hasattr(result, 'html') and result.html:
+                    print(f"  Crawl4AI result.links empty, extracting from HTML...")
+                    html_links = self._extract_links_from_html(result.html, url, base_domain)
+                    for link_info in html_links:
+                        if link_info['is_internal']:
+                            internal_links.append(link_info['url'])
+                            internal_link_details.append({
+                                'url': link_info['url'],
+                                'text': link_info['text'],
+                                'source': 'html_fallback'
+                            })
+                        else:
+                            external_links.append(link_info['url'])
 
                 # Normalize internal links to full URLs
                 normalized_internal = []
