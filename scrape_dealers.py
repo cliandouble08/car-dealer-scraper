@@ -692,13 +692,17 @@ class GenericDealerScraper:
             await asyncio.sleep(click_delay)
             await self._select_zip_suggestion(search_input, zip_code)
 
-            # Always try to find a search/update button first
+            # Always press Enter after entering zip code
+            await search_input.press('Enter')
+            await asyncio.sleep(click_delay)
+
+            # Also try to click a search/update button if present
             search_button = await self._find_search_button()
             if search_button:
-                await search_button.click()
-            else:
-                # Fallback to Enter if no button found
-                await search_input.press('Enter')
+                try:
+                    await search_button.click()
+                except Exception:
+                    pass  # Button click is optional, Enter should have worked
 
             await asyncio.sleep(wait_after_search)
 
