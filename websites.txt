@@ -5,7 +5,7 @@
 
 # Ford
 # https://www.ford.com/dealerships/
-https://www.ford.com/
+# https://www.ford.com/
 
 # Toyota (example - uncomment to use)
 https://www.toyota.com/

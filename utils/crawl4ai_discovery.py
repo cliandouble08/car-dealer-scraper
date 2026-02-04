@@ -85,13 +85,15 @@ class Crawl4AIDiscovery:
             url: Base URL to crawl
 
         Returns:
-            Dict with 'internal_links', 'external_links', 'markdown', 'success'
+            Dict with 'internal_links', 'internal_link_details', 'external_links',
+            'markdown', 'success'
         """
         if not self.enabled:
             return {
                 'success': False,
                 'error': 'crawl4ai not available',
                 'internal_links': [],
+                'internal_link_details': [],
                 'external_links': [],
                 'markdown': ''
             }
@@ -116,6 +118,7 @@ class Crawl4AIDiscovery:
                         'success': False,
                         'error': 'Crawl failed',
                         'internal_links': [],
+                        'internal_link_details': [],
                         'external_links': [],
                         'markdown': ''
                     }
@@ -123,23 +126,74 @@ class Crawl4AIDiscovery:
                 # Extract links from result
                 internal_links = []
                 external_links = []
+                internal_link_details = []
+
+                base_domain = urlparse(url).netloc.replace('www.', '')
+
+                def normalize_link_entry(link_entry: Any) -> Optional[Dict[str, str]]:
+                    if not link_entry:
+                        return None
+                    if isinstance(link_entry, str):
+                        href = link_entry
+                        text = ""
+                    elif isinstance(link_entry, dict):
+                        href = (
+                            link_entry.get('href')
+                            or link_entry.get('url')
+                            or link_entry.get('link')
+                            or ""
+                        )
+                        text = (
+                            link_entry.get('text')
+                            or link_entry.get('anchor')
+                            or link_entry.get('label')
+                            or link_entry.get('title')
+                            or link_entry.get('name')
+                            or ""
+                        )
+                    else:
+                        return None
+
+                    if not href:
+                        return None
+
+                    full_url = urljoin(url, href)
+                    link_domain = urlparse(full_url).netloc.replace('www.', '')
+                    is_internal = link_domain == base_domain or not link_domain
+                    return {
+                        'url': full_url,
+                        'text': text.strip(),
+                        'is_internal': is_internal
+                    }
 
                 # Handle different result formats
                 if hasattr(result, 'links') and result.links:
                     if isinstance(result.links, dict):
                         internal_links = result.links.get('internal', [])
                         external_links = result.links.get('external', [])
+                        for link in internal_links:
+                            normalized = normalize_link_entry(link)
+                            if normalized and normalized['is_internal']:
+                                internal_link_details.append({
+                                    'url': normalized['url'],
+                                    'text': normalized['text'],
+                                    'source': 'crawl4ai'
+                                })
                     elif isinstance(result.links, list):
                         # If links is a list, categorize them
-                        base_domain = urlparse(url).netloc.replace('www.', '')
                         for link in result.links:
-                            link_url = link if isinstance(link, str) else link.get('href', '')
-                            if link_url:
-                                link_domain = urlparse(link_url).netloc.replace('www.', '')
-                                if link_domain == base_domain or not link_domain:
-                                    internal_links.append(link_url)
-                                else:
-                                    external_links.append(link_url)
+                            normalized = normalize_link_entry(link)
+                            if not normalized:
+                                continue
+                            if normalized['is_internal']:
+                                internal_links.append(normalized['url'])
+                                internal_link_details.append({
+                                    'url': normalized['url'],
+                                    'text': normalized['text'],
+                                    'source': 'crawl4ai'
+                                })
+                            else:
+                                external_links.append(normalized['url'])
 
                 # Normalize internal links to full URLs
                 normalized_internal = []
@@ -150,9 +204,23 @@ class Crawl4AIDiscovery:
                         full_url = urljoin(url, link)
                         normalized_internal.append(full_url)
 
+                # Deduplicate internal link details by normalized URL
+                deduped_details = []
+                seen_details = set()
+                for item in internal_link_details:
+                    item_url = (item.get('url') or '').strip()
+                    if not item_url:
+                        continue
+                    normalized_url = urlparse(item_url)._replace(query='', fragment='').geturl()
+                    if normalized_url in seen_details:
+                        continue
+                    seen_details.add(normalized_url)
+                    deduped_details.append(item)
+
                 return {
                     'success': True,
                     'internal_links': list(set(normalized_internal)),
+                    'internal_link_details': deduped_details,
                     'external_links': external_links,
                     'markdown': result.markdown if hasattr(result, 'markdown') else '',
                     'html': result.html if hasattr(result, 'html') else ''
@@ -164,6 +232,7 @@ class Crawl4AIDiscovery:
                 'success': False,
                 'error': str(e),
                 'internal_links': [],
+                'internal_link_details': [],
                 'external_links': [],
                 'markdown': ''
             }
@@ -276,7 +345,8 @@ class Crawl4AIDiscovery:
         self,
         candidates: List[Dict[str, Any]],
         base_url: str,
-        page_content: str = ""
+        page_content: str = "",
+        link_details: Optional[List[Dict[str, str]]] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Use LLM to select the best dealer locator URL from candidates.
@@ -285,6 +355,7 @@ class Crawl4AIDiscovery:
             candidates: List of candidate URLs with scores
             base_url: Original base URL
             page_content: Optional page content for additional context
+            link_details: Optional list of link dicts with url/text/source
 
         Returns:
             Dict with 'is_locator', 'locator_url', 'confidence', 'locator_candidates'
@@ -316,7 +387,7 @@ class Crawl4AIDiscovery:
                 }
 
         # Prepare candidate list for LLM
-        if not candidates:
+        if not candidates and not link_details:
             return {
                 'is_locator': current_score >= 5,
                 'locator_url': None,
@@ -324,24 +395,37 @@ class Crawl4AIDiscovery:
                 'locator_candidates': []
             }
 
-        # Format candidates for LLM
-        candidate_list = "\n".join([
-            f"- {c['url']} (score: {c['score']})"
-            for c in candidates[:15]  # Limit to top 15
-        ])
+        formatted_links = []
+        if link_details:
+            for item in link_details:
+                link_url = (item.get('url') or '').strip()
+                if not link_url:
+                    continue
+                link_text = (item.get('text') or '').strip()
+                if link_text:
+                    formatted_links.append(f"- url: {link_url} | text: {link_text}")
+                else:
+                    formatted_links.append(f"- url: {link_url}")
+        else:
+            formatted_links = [
+                f"- url: {c['url']} (score: {c['score']})"
+                for c in candidates
+            ]
+
+        candidate_list = "\n".join(formatted_links)
 
         prompt = f"""You are analyzing a car manufacturer's website to find the "Find a Dealer" or "Dealer Locator" page.
 
 Website Base URL: {base_url}
 
-I have discovered these candidate URLs that might be the dealer locator page:
+        I have discovered these internal URLs (with link text where available):
 
 {candidate_list}
 
 Your task:
 1. Analyze the URLs and select the ONE that is most likely to be the dealer locator page
 2. The dealer locator is where users enter a zip code to find nearby dealers
-3. Look for patterns like /dealer, /dealers, /find-a-dealer, /dealerships, /locations
+3. Prefer URLs whose link text or path suggests locator/search (e.g., "Find a Dealer", "/dealers", "/dealer-locator")
 
 Return ONLY valid JSON:
 {{
@@ -433,6 +517,7 @@ Return ONLY the JSON. /no_think"""
             return None
 
         internal_links = crawl_result['internal_links']
+        internal_link_details = crawl_result.get('internal_link_details') or []
         print(f"  Found {len(internal_links)} internal links")
 
         # Step 2: Filter and score candidates
@@ -444,11 +529,20 @@ Return ONLY the JSON. /no_think"""
             for i, c in enumerate(candidates[:3]):
                 print(f"    {i+1}. {c['url']} (score: {c['score']})")
 
+        # Ensure we always pass all internal links to the LLM
+        if not internal_link_details and internal_links:
+            internal_link_details = [
+                {'url': link, 'text': '', 'source': 'crawl4ai'}
+                for link in internal_links
+                if link
+            ]
+
         # Step 3: Use LLM to select the best one
         result = self.select_best_locator_with_llm(
             candidates,
             url,
-            crawl_result.get('markdown', '')
+            crawl_result.get('markdown', ''),
+            internal_link_details
         )
 
         return result

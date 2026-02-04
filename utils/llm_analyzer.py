@@ -527,6 +527,14 @@ Your task is to analyze this page and identify EVERYTHING needed to scrape deale
     "phone_patterns": ["\\\\(?\\\\d{{3}}\\\\)?[-.\\\\s]?\\\\d{{3}}[-.\\\\s]?\\\\d{{4}}"],
     "address_patterns": [".+?,\\\\s*[A-Za-z\\\\s]+,\\\\s*[A-Z]{{2}}\\\\s+\\\\d{{5}}"]
   }},
+  "popup": {{
+    "has_blocking_popup": false,
+    "popup_container": "CSS selector for popup/modal content container",
+    "popup_overlay": "CSS selector for blocking overlay if separate",
+    "popup_zip_input": "CSS selector for zip input within popup",
+    "popup_submit_button": "CSS selector for submit button in popup",
+    "popup_type": "zip_required"
+  }},
   "confidence": 0.85,
   "notes": "Additional observations about the page structure"
 }}
@@ -548,6 +556,13 @@ IMPORTANT Guidelines:
 10. Use valid CSS selectors. The "type" field indicates if we should get text content or an attribute value.
 11. **confidence**: 0.0-1.0 based on how certain you are about the selectors
 12. If something doesn't exist, use null or empty array []
+13. **popup**: Check if the page shows a blocking popup/modal that requires zip input BEFORE showing dealer results:
+    - has_blocking_popup: true if a modal/popup blocks the page until zip is entered
+    - popup_container: CSS selector for the modal content (e.g., .modal-content, .modal-dialog, [role='dialog'])
+    - popup_overlay: CSS selector for the overlay/backdrop (e.g., .modal-overlay, .modal-backdrop)
+    - popup_zip_input: CSS selector for the zip input INSIDE the popup
+    - popup_submit_button: CSS selector for submit button in popup
+    - popup_type: "zip_required" if zip input needed, "location_permission" for geolocation prompts, "other" otherwise
 
 Return ONLY the JSON, no additional text or markdown formatting. /no_think"""
 

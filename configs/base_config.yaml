@@ -27,7 +27,9 @@ selectors:
     - "button[type='submit']"
     - "button:has-text('Search')"
     - "button:has-text('Find')"
+    - "button:has-text('Update')"
     - "button:has-text('Go')"
+    - "button:has-text('Submit')"
     - "input[type='submit']"
     - "[aria-label*='Search']"
 
@@ -74,6 +76,47 @@ selectors:
     - "div[class*='container']"
     - "[class*='scroll']"
     - "[class*='dealer-list']"
+
+  # Popup/Modal overlay patterns (blocking elements)
+  popup_overlay:
+    - ".modal-overlay"
+    - "[class*='modal-overlay']"
+    - "[class*='modalOverlay']"
+    - ".modal-backdrop"
+    - "[class*='backdrop'][class*='modal']"
+    - ".overlay[class*='modal']"
+    - "[class*='interstitial-overlay']"
+
+  # Popup/Modal content containers (where inputs are)
+  popup_container:
+    - "[role='dialog']"
+    - "[aria-modal='true']"
+    - ".modal-content"
+    - ".modal-dialog"
+    - ".modal-body"
+    - "[class*='modal-content']"
+    - "[class*='modal-dialog']"
+    - "[class*='modalContent']"
+    - "[class*='popup-content']"
+    - "[class*='lightbox-content']"
+
+  # Zip input patterns within popups
+  popup_zip_input:
+    - "[role='dialog'] input[placeholder*='ZIP' i]"
+    - "[aria-modal='true'] input[placeholder*='zip' i]"
+    - ".modal-content input[placeholder*='zip' i]"
+    - ".modal-dialog input[placeholder*='zip' i]"
+    - "[class*='modal'] input[placeholder*='zip' i]"
+    - "[class*='popup'] input[placeholder*='zip' i]"
+
+  # Submit buttons within popups
+  popup_submit:
+    - "[role='dialog'] button[type='submit']"
+    - "[aria-modal='true'] button[type='submit']"
+    - ".modal-content button[type='submit']"
+    - "[class*='modal'] button:has-text('Find')"
+    - "[class*='modal'] button:has-text('Search')"
+    - "[class*='modal'] button:has-text('Go')"
 
 # Data field selectors within dealer cards
 data_fields:
@@ -126,6 +169,11 @@ interactions:
   click_delay: 0.3
   max_scroll_iterations: 30
   max_no_new_count: 3
+  
+  # Popup/Modal handling settings
+  popup_wait_timeout: 3      # seconds to wait for popup after page load
+  popup_dismiss_timeout: 5   # seconds to wait for popup to dismiss after submission
+  max_popup_attempts: 3      # maximum popup handling retries
 
 # Input fields configuration
 input_fields:

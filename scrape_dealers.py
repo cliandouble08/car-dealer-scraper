@@ -562,7 +562,22 @@ class GenericDealerScraper:
         # Handle cookie popup
         await self._handle_cookie_popup()
 
-        # Handle location modal/popup if present (e.g., Acura prompt)
+        # Handle blocking popups that require zip input before showing dealers
+        # This handles modal overlays like Toyota's that block the main page
+        popup_handled = await self._handle_blocking_popup_loop(zip_code)
+        
+        if popup_handled:
+            # Check if dealer cards are already visible after popup handling
+            # (some sites show results directly after popup submission)
+            if await self._dealer_cards_visible():
+                if self.debug:
+                    print(f"    Dealer cards visible after popup, extracting...")
+                await self._expand_results()
+                dealers = await self._extract_dealers(zip_code)
+                return dealers
+        
+        # Fallback: also try the original location prompt handler
+        # (for sites with different modal patterns)
         await self._handle_location_prompt(zip_code)
 
         # Optional debug: log candidate inputs and frames
@@ -583,15 +598,12 @@ class GenericDealerScraper:
             await asyncio.sleep(click_delay)
             await self._select_zip_suggestion(search_input, zip_code)
 
-            # Execute search sequence
-            search_sequence = self.interactions.get('search_sequence', ['fill_input', 'press_enter'])
-            if 'click_search' in search_sequence:
-                search_button = await self._find_search_button()
-                if search_button:
-                    await search_button.click()
-                else:
-                    await search_input.press('Enter')
+            # Always try to find a search/update button first
+            search_button = await self._find_search_button()
+            if search_button:
+                await search_button.click()
             else:
+                # Fallback to Enter if no button found
                 await search_input.press('Enter')
 
             await asyncio.sleep(wait_after_search)
@@ -800,13 +812,24 @@ class GenericDealerScraper:
         return None
 
     async def _find_visible_dialog(self):
-        """Find a visible modal/dialog container."""
+        """Find a visible modal/dialog container (content container, not overlay)."""
+        # Order matters: prefer content containers over overlays
         dialog_selectors = [
             "[role='dialog']",
             "[aria-modal='true']",
-            ".modal",
-            "[class*='modal']",
-            "[class*='popup']",
+            ".modal-content",
+            ".modal-dialog",
+            ".modal-body",
+            "[class*='modal-content']",
+            "[class*='modal-dialog']",
+            "[class*='modalContent']",
+            "[class*='modalDialog']",
+            ".modal:not(.modal-overlay):not([class*='overlay'])",
+            "[class*='popup-content']",
+            "[class*='popup-dialog']",
+            "[class*='popupContent']",
+            "[class*='lightbox-content']",
+            "[class*='interstitial-content']",
         ]
         for selector in dialog_selectors:
             try:
@@ -816,7 +839,262 @@ class GenericDealerScraper:
                         return element
             except Exception:
                 continue
+        
+        # Fallback: find any modal-like container that's not just an overlay
+        fallback_selectors = [
+            ".modal",
+            "[class*='modal']",
+            "[class*='popup']",
+        ]
+        for selector in fallback_selectors:
+            try:
+                elements = await self.page.query_selector_all(selector)
+                for element in elements:
+                    if await element.is_visible():
+                        # Skip pure overlay elements (they don't contain inputs)
+                        class_name = await element.get_attribute('class') or ''
+                        if 'overlay' in class_name.lower() and 'content' not in class_name.lower():
+                            continue
+                        return element
+            except Exception:
+                continue
         return None
+
+    async def _detect_blocking_overlay(self) -> bool:
+        """
+        Detect if a blocking modal overlay is present on the page.
+        
+        Returns:
+            True if a blocking overlay is detected, False otherwise.
+        """
+        overlay_selectors = [
+            ".modal-overlay",
+            "[class*='modal-overlay']",
+            "[class*='modalOverlay']",
+            ".overlay[class*='modal']",
+            "[class*='backdrop'][class*='modal']",
+            ".modal-backdrop",
+            "[class*='interstitial-overlay']",
+        ]
+        for selector in overlay_selectors:
+            try:
+                elements = await self.page.query_selector_all(selector)
+                for element in elements:
+                    if await element.is_visible():
+                        return True
+            except Exception:
+                continue
+        return False
+
+    async def _find_modal_zip_input(self):
+        """
+        Find a zip code input field within any modal on the page.
+        Searches globally since overlay and content may be siblings.
+        
+        Returns:
+            Element handle for the zip input, or None if not found.
+        """
+        # Search for zip inputs that are likely in a modal context
+        modal_input_selectors = [
+            # Inputs inside modal content containers
+            ".modal-content input[placeholder*='ZIP' i]",
+            ".modal-content input[placeholder*='zip' i]",
+            ".modal-dialog input[placeholder*='ZIP' i]",
+            ".modal-dialog input[placeholder*='zip' i]",
+            "[role='dialog'] input[placeholder*='ZIP' i]",
+            "[role='dialog'] input[placeholder*='zip' i]",
+            "[aria-modal='true'] input[placeholder*='ZIP' i]",
+            "[aria-modal='true'] input[placeholder*='zip' i]",
+            # Inputs with modal-related ancestors
+            "[class*='modal'] input[placeholder*='ZIP' i]",
+            "[class*='modal'] input[placeholder*='zip' i]",
+            "[class*='popup'] input[placeholder*='ZIP' i]",
+            "[class*='popup'] input[placeholder*='zip' i]",
+            # Fallback: any visible zip input (when overlay is blocking)
+            "input[placeholder*='ZIP' i]",
+            "input[placeholder*='zip' i]",
+            "input[aria-label*='ZIP' i]",
+            "input[aria-label*='zip' i]",
+            "input[name*='zip' i]",
+            "input[id*='zip' i]",
+        ]
+        
+        for selector in modal_input_selectors:
+            try:
+                elements = await self.page.query_selector_all(selector)
+                for element in elements:
+                    if await element.is_visible():
+                        return element
+            except Exception:
+                continue
+        return None
+
+    async def _find_modal_submit_button(self, near_input=None):
+        """
+        Find a submit/search button within a modal context.
+        
+        Args:
+            near_input: Optional input element to search near.
+            
+        Returns:
+            Element handle for the submit button, or None if not found.
+        """
+        button_selectors = [
+            # Buttons in modal content containers
+            ".modal-content button[type='submit']",
+            ".modal-dialog button[type='submit']",
+            "[role='dialog'] button[type='submit']",
+            "[aria-modal='true'] button[type='submit']",
+            "[class*='modal'] button[type='submit']",
+            # Text-based button matching in modals
+            ".modal-content button:has-text('Find')",
+            ".modal-content button:has-text('Search')",
+            ".modal-content button:has-text('Go')",
+            ".modal-dialog button:has-text('Find')",
+            ".modal-dialog button:has-text('Search')",
+            "[role='dialog'] button:has-text('Find')",
+            "[role='dialog'] button:has-text('Search')",
+            "[class*='modal'] button:has-text('Find')",
+            "[class*='modal'] button:has-text('Search')",
+            "[class*='modal'] button:has-text('Submit')",
+            # Generic buttons near forms
+            "button[type='submit']",
+            "button:has-text('Find')",
+            "button:has-text('Search')",
+        ]
+        
+        for selector in button_selectors:
+            try:
+                elements = await self.page.query_selector_all(selector)
+                for element in elements:
+                    if await element.is_visible():
+                        return element
+            except Exception:
+                continue
+        return None
+
+    async def _wait_for_overlay_dismiss(self, timeout: float = 5.0) -> bool:
+        """
+        Wait for modal overlay to be dismissed/hidden.
+        
+        Args:
+            timeout: Maximum time to wait in seconds.
+            
+        Returns:
+            True if overlay was dismissed, False if still present after timeout.
+        """
+        start_time = asyncio.get_event_loop().time()
+        check_interval = 0.3
+        
+        while (asyncio.get_event_loop().time() - start_time) < timeout:
+            if not await self._detect_blocking_overlay():
+                return True
+            await asyncio.sleep(check_interval)
+        
+        return False
+
+    async def _dealer_cards_visible(self) -> bool:
+        """
+        Quick check if dealer cards are already visible on the page.
+        
+        Returns:
+            True if dealer cards are visible, False otherwise.
+        """
+        dealer_card_selector = self._get_dealer_card_selector()
+        try:
+            element = await self.page.query_selector(dealer_card_selector)
+            if element and await element.is_visible():
+                return True
+        except Exception:
+            pass
+        return False
+
+    async def _handle_blocking_popup_loop(self, zip_code: str, max_attempts: int = 3) -> bool:
+        """
+        Handle blocking popups by first trying Escape key, then falling back to zip input.
+        
+        This handles modal overlays that block the page. The method first tries
+        pressing Escape to dismiss the popup. If that doesn't work, it falls back
+        to filling in the zip code and pressing Enter.
+        
+        Args:
+            zip_code: Zip code to enter in the popup (used as fallback).
+            max_attempts: Not used, kept for API compatibility.
+            
+        Returns:
+            True if a popup was handled, False if no popup was detected.
+        """
+        # Check for blocking overlay or dialog
+        has_overlay = await self._detect_blocking_overlay()
+        if not has_overlay:
+            dialog = await self._find_visible_dialog()
+            if not dialog:
+                return False  # No popup detected
+        
+        if self.debug:
+            print(f"    Detected blocking popup, trying Escape key...")
+        
+        # Step 1: Try pressing Escape to dismiss
+        try:
+            await self.page.keyboard.press('Escape')
+            await asyncio.sleep(1)
+        except Exception as e:
+            if self.debug:
+                print(f"    Error pressing Escape: {e}")
+        
+        # Check if overlay is dismissed
+        if not await self._detect_blocking_overlay():
+            dialog = await self._find_visible_dialog()
+            if not dialog:
+                if self.debug:
+                    print(f"    Popup dismissed with Escape key")
+                return True
+        
+        # Step 2: Escape didn't work, fall back to zip input + Enter
+        if self.debug:
+            print(f"    Escape didn't work, trying zip input...")
+        
+        zip_input = await self._find_modal_zip_input()
+        if zip_input:
+            try:
+                await zip_input.click()
+                await zip_input.fill(zip_code)
+                await asyncio.sleep(0.3)
+                await zip_input.press('Enter')
+                await asyncio.sleep(2)
+                
+                if self.debug:
+                    print(f"    Submitted zip code in popup")
+                return True
+            except Exception as e:
+                if self.debug:
+                    print(f"    Error with zip input fallback: {e}")
+        
+        return False
+
+    async def _try_dismiss_popup(self):
+        """
+        Attempt to dismiss a popup by clicking close button or overlay.
+        """
+        close_selectors = [
+            "[class*='modal'] button[aria-label*='close' i]",
+            "[class*='modal'] button[class*='close']",
+            "[class*='modal'] .close",
+            "[role='dialog'] button[aria-label*='close' i]",
+            "button[aria-label*='dismiss' i]",
+            ".modal-close",
+            "[class*='close-button']",
+        ]
+        
+        for selector in close_selectors:
+            try:
+                element = await self.page.query_selector(selector)
+                if element and await element.is_visible():
+                    await element.click()
+                    await asyncio.sleep(0.5)
+                    return
+            except Exception:
+                continue
 
     async def _find_visible_element(self, selectors, root=None):
         """Find the first visible element matching any selector."""
@@ -994,7 +1272,9 @@ class GenericDealerScraper:
             "button[type='submit']",
             "button:has-text('Search')",
             "button:has-text('Find')",
+            "button:has-text('Update')",
             "button:has-text('Go')",
+            "button:has-text('Submit')",
             "input[type='submit']",
         ]
 
@@ -1547,6 +1827,159 @@ def scrape_parallel(
     return dealers
 
 
+async def scrape_single_website_with_semaphore(
+    semaphore: asyncio.Semaphore,
+    index: int,
+    total: int,
+    url: str,
+    zip_codes: List[str],
+    headless: bool,
+    enable_ai: bool,
+    zip_workers: int,
+    output_dir: str,
+    stagger_delay: float = 2.0
+) -> Tuple[str, List[Dealer]]:
+    """
+    Scrape a single website with semaphore-controlled concurrency.
+
+    Args:
+        semaphore: Asyncio semaphore to limit concurrent scrapers
+        index: Website index (for logging)
+        total: Total number of websites (for logging)
+        url: Website URL to scrape
+        zip_codes: List of zip codes to search
+        headless: Run browser in headless mode
+        enable_ai: Enable AI features
+        zip_workers: Number of parallel workers for zip codes within this website
+        output_dir: Directory to save results
+        stagger_delay: Delay between starting scrapers to avoid thundering herd
+
+    Returns:
+        Tuple of (domain, list of dealers)
+    """
+    domain = GenericDealerScraper._extract_domain(url)
+
+    # Stagger startup to avoid overwhelming resources
+    await asyncio.sleep(index * stagger_delay)
+
+    async with semaphore:
+        print(f"\n{'='*60}")
+        print(f"[{index+1}/{total}] Starting scrape of {domain}...")
+        print(f"URL: {url}")
+        if zip_workers > 1:
+            print(f"Using {zip_workers} parallel zip-code workers")
+        print(f"{'='*60}")
+
+        try:
+            if zip_workers > 1:
+                # Run zip-code parallel scraping in a thread to avoid blocking
+                loop = asyncio.get_event_loop()
+                dealers = await loop.run_in_executor(
+                    None,
+                    lambda: scrape_parallel(
+                        url, zip_codes,
+                        headless=headless,
+                        workers=zip_workers,
+                        enable_ai=enable_ai
+                    )
+                )
+            else:
+                dealers = await scrape_website(
+                    url, zip_codes,
+                    headless=headless,
+                    enable_ai=enable_ai
+                )
+
+            if dealers:
+                print(f"\n[{domain}] Total dealers found: {len(dealers)}")
+                save_results(dealers, output_dir, domain)
+            else:
+                print(f"\n[{domain}] No dealers found")
+
+            return (domain, dealers)
+
+        except Exception as e:
+            print(f"\n[{domain}] Error during scraping: {e}")
+            return (domain, [])
+
+
+async def scrape_websites_parallel(
+    websites: List[str],
+    zip_codes: List[str],
+    headless: bool,
+    enable_ai: bool,
+    website_workers: int,
+    zip_workers: int,
+    output_dir: str
+) -> Dict[str, List[Dealer]]:
+    """
+    Scrape multiple websites in parallel using asyncio.
+
+    Args:
+        websites: List of website URLs to scrape
+        zip_codes: List of zip codes to search
+        headless: Run browsers in headless mode
+        enable_ai: Enable AI features
+        website_workers: Maximum number of websites to scrape concurrently
+        zip_workers: Number of parallel workers for zip codes per website
+        output_dir: Directory to save results
+
+    Returns:
+        Dict mapping domain to list of dealers
+    """
+    # Limit website workers to reasonable max (each spawns a browser)
+    website_workers = min(website_workers, len(websites), 4)
+
+    print(f"\n{'='*60}")
+    print(f"PARALLEL MODE: Scraping {len(websites)} websites")
+    print(f"  - Website concurrency: {website_workers}")
+    print(f"  - Zip-code workers per website: {zip_workers}")
+    print(f"{'='*60}")
+
+    # Create semaphore to limit concurrent scrapers
+    semaphore = asyncio.Semaphore(website_workers)
+
+    # Create tasks for all websites
+    tasks = [
+        scrape_single_website_with_semaphore(
+            semaphore=semaphore,
+            index=i,
+            total=len(websites),
+            url=url,
+            zip_codes=zip_codes,
+            headless=headless,
+            enable_ai=enable_ai,
+            zip_workers=zip_workers,
+            output_dir=output_dir,
+            stagger_delay=1.5  # Stagger by 1.5 seconds per website
+        )
+        for i, url in enumerate(websites)
+    ]
+
+    # Run all tasks concurrently (semaphore limits actual concurrency)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Aggregate results
+    results_by_domain: Dict[str, List[Dealer]] = {}
+    all_dealers = []
+
+    for result in results:
+        if isinstance(result, Exception):
+            print(f"Website scraping failed with error: {result}")
+            continue
+        domain, dealers = result
+        results_by_domain[domain] = dealers
+        all_dealers.extend(dealers)
+
+    print(f"\n{'='*60}")
+    print(f"PARALLEL SCRAPING COMPLETE")
+    print(f"  - Websites processed: {len(results_by_domain)}")
+    print(f"  - Total dealers found: {len(all_dealers)}")
+    print(f"{'='*60}")
+
+    return results_by_domain
+
+
 async def main_async():
     """Async main function."""
     parser = argparse.ArgumentParser(
@@ -1589,7 +2022,13 @@ async def main_async():
         "--workers", "-w",
         type=int,
         default=1,
-        help="Number of parallel workers per website (default: 1)"
+        help="Number of parallel workers per website for zip codes (default: 1)"
+    )
+    parser.add_argument(
+        "--website-workers",
+        type=int,
+        default=1,
+        help="Number of websites to scrape in parallel (default: 1, max: 4)"
     )
     parser.add_argument(
         "--enable-ai",
@@ -1624,7 +2063,8 @@ async def main_async():
 
     # Configuration
     headless = not args.no_headless
-    workers = max(1, args.workers)
+    zip_workers = max(1, args.workers)
+    website_workers = min(max(1, args.website_workers), 4)  # Cap at 4 concurrent websites
     enable_ai = args.enable_ai and not args.disable_ai
 
     if enable_ai:
@@ -1637,37 +2077,54 @@ async def main_async():
     print(f"Loaded {len(zip_codes)} zip codes")
     print(f"Loaded {len(websites)} websites to scrape")
 
-    # Scrape each website
+    # Scrape websites
     all_dealers = []
-    for i, url in enumerate(websites):
-        domain = GenericDealerScraper._extract_domain(url)
-        print(f"\n{'='*60}")
-        print(f"[{i+1}/{len(websites)}] Scraping {domain}...")
-        print(f"URL: {url}")
-        if workers > 1:
-            print(f"Using {workers} parallel workers")
-        print(f"{'='*60}")
 
-        if workers > 1:
-            dealers = scrape_parallel(
-                url, zip_codes,
-                headless=headless,
-                workers=workers,
-                enable_ai=enable_ai
-            )
-        else:
-            dealers = await scrape_website(
-                url, zip_codes,
-                headless=headless,
-                enable_ai=enable_ai
-            )
-
-        if dealers:
-            print(f"\nTotal {domain} dealers found: {len(dealers)}")
-            save_results(dealers, args.output_dir, domain)
+    if website_workers > 1 and len(websites) > 1:
+        # Parallel website scraping
+        results_by_domain = await scrape_websites_parallel(
+            websites=websites,
+            zip_codes=zip_codes,
+            headless=headless,
+            enable_ai=enable_ai,
+            website_workers=website_workers,
+            zip_workers=zip_workers,
+            output_dir=args.output_dir
+        )
+        # Aggregate all dealers
+        for domain, dealers in results_by_domain.items():
             all_dealers.extend(dealers)
-        else:
-            print(f"\nNo dealers found for {domain}")
+    else:
+        # Sequential website scraping (original behavior)
+        for i, url in enumerate(websites):
+            domain = GenericDealerScraper._extract_domain(url)
+            print(f"\n{'='*60}")
+            print(f"[{i+1}/{len(websites)}] Scraping {domain}...")
+            print(f"URL: {url}")
+            if zip_workers > 1:
+                print(f"Using {zip_workers} parallel zip-code workers")
+            print(f"{'='*60}")
+
+            if zip_workers > 1:
+                dealers = scrape_parallel(
+                    url, zip_codes,
+                    headless=headless,
+                    workers=zip_workers,
+                    enable_ai=enable_ai
+                )
+            else:
+                dealers = await scrape_website(
+                    url, zip_codes,
+                    headless=headless,
+                    enable_ai=enable_ai
+                )
+
+            if dealers:
+                print(f"\nTotal {domain} dealers found: {len(dealers)}")
+                save_results(dealers, args.output_dir, domain)
+                all_dealers.extend(dealers)
+            else:
+                print(f"\nNo dealers found for {domain}")
 
     print(f"\n{'='*60}")
     print(f"COMPLETE: Found {len(all_dealers)} dealers across all websites")

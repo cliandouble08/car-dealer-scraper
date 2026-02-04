@@ -8,6 +8,7 @@ Converts any URL to an LLM-friendly input with https://r.jina.ai/
 
 import os
 import time
+import json
 import requests
 from datetime import datetime
 from pathlib import Path
@@ -38,8 +39,39 @@ class JinaReader:
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
         })
+        # Allow custom TLS verification behavior for environments with SSL interception.
+        # Use JINA_SSL_VERIFY=false to disable verification, or JINA_CA_BUNDLE to point
+        # to a custom CA bundle file.
+        verify_env = os.getenv('JINA_SSL_VERIFY', 'true').lower()
+        if verify_env in ['0', 'false', 'no']:
+            self.session.verify = False
+        else:
+            ca_bundle = os.getenv('JINA_CA_BUNDLE')
+            if ca_bundle:
+                self.session.verify = ca_bundle
         # Track domains that have rate limited us
         self._rate_limited_domains = {}
+
+    def _debug_log(self, hypothesis_id: str, location: str, message: str, data: Dict[str, Any]):
+        """Append a small NDJSON debug log line."""
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": hypothesis_id,
+                "location": location,
+                "message": message,
+                "data": data,
+                "timestamp": int(time.time() * 1000)
+            }
+            with open(
+                "/Users/Lucy_Wang/Library/CloudStorage/OneDrive-McKinsey&Company/Documents/GitHub/car-dealer-scraper/.cursor/debug.log",
+                "a",
+                encoding="utf-8"
+            ) as log_file:
+                log_file.write(json.dumps(payload) + "\n")
+        except Exception:
+            pass
 
     def fetch_page_content(
         self,
@@ -65,6 +97,29 @@ class JinaReader:
 
         if not url or not url.startswith(('http://', 'https://')):
             return None
+
+        # region agent log
+        try:
+            import certifi
+            certifi_path = certifi.where()
+        except Exception:
+            certifi_path = None
+        self._debug_log(
+            "H1",
+            "utils/jina_reader.py:fetch_page_content",
+            "entry",
+            {
+                "url": url,
+                "enabled": self.enabled,
+                "streaming": streaming,
+                "timeout": timeout,
+                "session_verify": getattr(self.session, "verify", None),
+                "requests_ca_bundle": os.getenv("REQUESTS_CA_BUNDLE"),
+                "ssl_cert_file": os.getenv("SSL_CERT_FILE"),
+                "certifi_where": certifi_path
+            }
+        )
+        # endregion
 
         # Extract domain to check for rate limiting
         domain = self.extract_domain(url)
@@ -105,6 +160,20 @@ class JinaReader:
                 current_timeout = timeout if attempt == 0 else self.EXTENDED_TIMEOUT
 
                 try:
+                    # region agent log
+                    self._debug_log(
+                        "H3",
+                        "utils/jina_reader.py:fetch_page_content",
+                        "request_attempt",
+                        {
+                            "attempt": attempt + 1,
+                            "use_streaming": use_streaming,
+                            "timeout": current_timeout,
+                            "jina_url": jina_url,
+                            "has_wait_selector": bool(wait_selector)
+                        }
+                    )
+                    # endregion
                     if use_streaming:
                         response = self._fetch_streaming(jina_url, current_headers, current_timeout)
                     else:
@@ -123,6 +192,18 @@ class JinaReader:
                         
                         resp.raise_for_status()
                         response = resp.text
+
+                    # region agent log
+                    self._debug_log(
+                        "H3",
+                        "utils/jina_reader.py:fetch_page_content",
+                        "response_received",
+                        {
+                            "use_streaming": use_streaming,
+                            "response_len": len(response) if response else 0
+                        }
+                    )
+                    # endregion
 
                     # Check if we got a valid response (not an error page)
                     if response and len(response) > 100:
@@ -181,6 +262,20 @@ class JinaReader:
                     return None
 
                 except requests.exceptions.RequestException as e:
+                    # region agent log
+                    self._debug_log(
+                        "H1",
+                        "utils/jina_reader.py:fetch_page_content",
+                        "request_exception",
+                        {
+                            "attempt": attempt + 1,
+                            "use_streaming": use_streaming,
+                            "error_type": type(e).__name__,
+                            "error_msg": str(e),
+                            "is_ssl_error": isinstance(e, requests.exceptions.SSLError)
+                        }
+                    )
+                    # endregion
                     if attempt < self.MAX_RETRIES - 1:
                         print(f"  Request error (attempt {attempt + 1}/{self.MAX_RETRIES}): {e}")
                         time.sleep(delay)
